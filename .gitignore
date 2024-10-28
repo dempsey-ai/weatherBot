@@ -1,4 +1,10 @@
 package-lock.json
+.prettierignore
+.prettierrc.json
+copy
+jest-config.js
+tsconfig.json
+.eslintrc.yml
 
 # Logs
 logs

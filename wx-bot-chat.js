@@ -44,8 +44,14 @@ require('dotenv').config();
 
 
 const DEBUG_MSG = "Debug: checkpoint";
-const IS_DEBUG = process.env.DEBUG_MODE === 'true';
+const IS_DEBUG = process.env.DEBUG_MODE === 'false';
 const SIMPLEX_CHAT_PORT = process.env.SIMPLEX_CHAT_PORT || 5225;
+
+const SHARE_BOT_ADDRESS = process.env.shareBotAddress === 'true';
+const INIT_HOST_USER = process.env.initHostUser ? process.env.initHostUser.replace(/^['"]|['"]$/g, '') : '';
+const assignedHostUser = INIT_HOST_USER !== ''; // true if INIT_HOST_USER has a value
+// "/_profile_address 2 on"
+
 
 let wxUsers = {};
 
@@ -65,6 +71,60 @@ async function run() {
   console.log(`Bot address: ${address}`);
   
   await chat.enableAddressAutoAccept();
+
+  if (SHARE_BOT_ADDRESS) {
+    try {
+      await chat.sendChatCmdStr(`/_profile_address ${user.userId} on`);
+    } catch (error) {
+      console.error("Error sharing bot address:", error);
+    }
+  }
+
+  if (assignedHostUser && INIT_HOST_USER !== '') {
+    try {
+      let resp = await chat.sendChatCmdStr(`/connect ${INIT_HOST_USER}`);
+      //console.log("Host user connection response:", JSON.stringify(resp, null, 3));
+
+      if (resp.chatError) {
+        console.error("Error connecting host user:", resp.chatError);
+        let existingUserId = null;
+        if (resp.chatError.errorType.connectionPlan.contactAddressPlan.type == 'known') {
+          existingUserId = resp.chatError.errorType.connectionPlan.contactAddressPlan.contact.contactId + '.1';
+        } else if (resp.chatError.errorType.connectionPlan.contactAddressPlan.groupId) {
+          existingUserId = resp.chatError.errorType.connectionPlan.contactAddressPlan.groupId + '.2';
+        } else {
+          existingUserId = null; // or handle the case where neither is present
+        }
+        // if existingUserId is in wxUsers, then we need to update and forceHost = true
+        if (existingUserId && wxUsers[existingUserId]) {
+          try {
+              wxUsers[existingUserId].chattyType = 'host';
+          } catch (error) {
+            console.error("Error updating wxUsers to forceHost:", error);
+          }
+        }
+        console.log("Host User already connected as :", existingUserId);
+      }
+    } catch (error) {
+      let existingUserId = null;
+      if (error.chatError.errorType.connectionPlan.contactAddressPlan.type == 'known') {
+        existingUserId = error.chatError.errorType.connectionPlan.contactAddressPlan.contact.contactId + '.1';
+      } else if (error.chatError.errorType.connectionPlan.contactAddressPlan.groupId) {
+        existingUserId = error.chatError.errorType.connectionPlan.contactAddressPlan.groupId + '.2';
+      } else {
+        existingUserId = null; // or handle the case where neither is present
+      }
+      // if existingUserId is in wxUsers, then we need to update and forceHost = true
+      if (existingUserId && wxUsers[existingUserId]) {
+        try {
+            wxUsers[existingUserId].chattyType = 'host';
+        } catch (error) {
+          console.error("Error updating wxUsers to forceHost:", error);
+        }
+      }
+      console.log("Host User already connected as :", existingUserId);
+    }
+  }
 
   //let xxx = await chat.sendChatCommand({type: "listUsers"});
   //console.log("xxx= " + JSON.stringify(xxx, null, 3));
@@ -119,7 +179,10 @@ async function handleNewContact(chat, contact) {
 async function handleNewMessage(chat, chatItem) {
   const { chatInfo } = chatItem;
   const msg = ciContentText(chatItem.chatItem.content);
-  //console.log("new message, contact info: " + JSON.stringify(chatItem, null, 3));
+  
+  if (IS_DEBUG ) {
+    console.log("new message, contact info: " + JSON.stringify(chatItem, null, 3));
+  } 
 
 
   await userManagement.updateWxUsers(wxUsers, chatInfo);
@@ -145,7 +208,7 @@ async function handleNewMessage(chat, chatItem) {
     const qualified_msg = await wxBotFramework.evaluateMessage(wxChatUser, msg);
     console.log("Evaluated Msg: " + JSON.stringify(qualified_msg, null, 3));
 
-    if (IS_DEBUG) {
+    if (IS_DEBUG && (wxChatUser.chattyType === "host" || wxChatUser.chattyType === "admin")) {
       await wxBotFramework.sendMessage(chat, wxChatUser, "Evaluated Msg: " + JSON.stringify(qualified_msg, null, 3));
     } 
 

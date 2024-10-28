@@ -18,7 +18,7 @@ const {ChatType} = require("simplex-chat/dist/command")
 
 let wxUsers = {};
 
-const updateWxUsers = async (wxUsers, chatInfo) => {
+const updateWxUsers = async (wxUsers, chatInfo, forceHost = false) => {
 
   let userId = (chatInfo.type === ChatInfoType.Direct) 
     ? chatInfo.contact?.contactId 
@@ -45,7 +45,7 @@ const updateWxUsers = async (wxUsers, chatInfo) => {
 
     wxUsers[wxUserId] = {
       wxUserId: wxUserId,
-      chattyType: Object.keys(wxUsers).length === 0 ? 'host' : 'user',
+      chattyType: forceHost || Object.keys(wxUsers).length === 0 ? 'host' : 'user',
       chatType: chatInfo.type,
       displayName,
       fullName,
