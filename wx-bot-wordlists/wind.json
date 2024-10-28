@@ -1,0 +1,38 @@
+{
+  "generalWords": [
+    "wind",
+    "windy",
+    "gusts",
+    "gusty"
+  ],
+  "specificCriteria": [
+    {
+      "label": "no wind",
+      "regex": "\\b(?:no|not|without)\\s+wind(?:s|y)?\\b",
+      "parameter": "wmax<5"
+    },
+    {
+      "label": "gusting over",
+      "regex": "gust(?:s|ing)?\\s*(?:>|over|more\\s+than|above|greater\\s+than)\\s*(\\d+)\\s*(?:mph)?",
+      "parameter": "gmin>"
+    },
+    {
+      "label": "wind greater than",
+      "regex": "wind(?:s|y)?\\s*(?:>|over|above|greater\\s+than)\\s*(\\d+)\\s*(?:mph)?",
+      "parameter": "wmin>"
+    },
+    {
+      "label": "wind less than",
+      "regex": "wind(?:s|y)?\\s*(?:<|under|below|less\\s+than)\\s*(\\d+)\\s*(?:mph)?",
+      "parameter": "wmax<"
+    },
+    {
+      "label": "wind gust greater than",
+      "regex": "gust(?:s|ing)?\\s*(?:>|over|more\\s+than|above|greater\\s+than)\\s*(\\d+)\\s*(?:mph)?",
+      "parameter": "gmin>"
+    }
+  ]
+}
+
+
+

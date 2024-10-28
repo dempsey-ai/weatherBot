@@ -1,0 +1,41 @@
+{
+  "generalWords": [
+    "location",
+    "zipcode",
+    "zip",
+    "city",
+    "town",
+    "gps",
+    "latitude",
+    "longitude",
+    "coordinates",
+    "position" 
+  ],
+  "specificCriteria": [
+    {
+      "label": "setting location (city, state)",
+      "regex": "\\b(?:location|set|to|is|as)?\\s*([A-Za-z]+(?:\\s+(?!set|to|is|as)[A-Za-z]+)*,\\s*[A-Za-z]{2})\\b",
+      "parameter": "loc-city:"
+    },
+    {
+      "label": "setting location (zipcode)",
+      "regex": "\\b(?:location|set|to|is|as)?\\s*(\\d{5})\\b",
+      "parameter": "loc-zip:"
+    },
+    {
+      "label": "setting location (lat, long) simple format",
+      "regex": ".*?\\b(?:location|coordinates?)\\b.*?([-+]?\\d+\\.\\d+)\\s*,\\s*([-+]?\\d+\\.\\d+)",
+      "parameter": "loc-gps:"
+    },
+    {
+      "label": "setting location (lat, long) with labels",
+      "regex": ".*?(?:lat(?:itude)?\\s*=?\\s*([-+]?\\d+\\.\\d+))\\s*,?\\s*(?:lon(?:g|gitude)?\\s*=?\\s*([-+]?\\d+\\.\\d+))",
+      "parameter": "loc-gps:"
+    },
+    {
+      "label": "setting location label",
+      "regex": "(?:set\\s+)?location\\s+(?:label|name)(?:\\s+to)?\\s+\"([^\"]+)\"",
+      "parameter": "loc-label:"
+    }
+  ]
+}

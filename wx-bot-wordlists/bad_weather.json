@@ -1,0 +1,21 @@
+{
+  "generalWords": [
+    "bad weather",
+    "bad",
+    "terrible",
+    "horrible",
+    "awful",
+    "miserable",
+    "sleet",
+    "hail",
+    "snow"
+],
+"specificCriteria": [
+  {
+    "label": "Bad Weather Words",
+    "regex": "",
+    "parameter": ["gusts", "ice", "icing", "sleet","freezing", "hail", "storms", "thunderstorms", "thunder", "lightning", "dangerous","flood", "inches", "fog", "extreme", "tornado", "hurricane", "snow"]
+  }
+ ]
+}
+

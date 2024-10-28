@@ -1,0 +1,44 @@
+{
+  "generalWords": [
+    "rain",
+    "rainfall",
+    "wet",
+    "raining",
+    "rainy",
+    "showers",
+    "sprinkles",
+    "drizzle",
+    "downpour",
+    "precipitation",
+    "storm",
+    "cloudburst",
+    "moisture",
+    "flood",
+    "drenching",
+    "soaking"
+  ],
+  "specificCriteria": [
+    {
+      "label": "no rain",
+      "regex": "\\b(?:no|without)\\s+rain\\b",
+      "parameter": "r<15"
+    },
+    {
+      "label": "rain greater than",
+      "regex": "rain\\s*(?:>|over|above|greater\\s+than)\\s*(\\d+)\\s*(?:%|percent)?",
+      "parameter": "r>"
+    },
+    {
+      "label": "rain less than",
+      "regex": "rain\\s*(?:<|under|below|less\\s+than)\\s*(\\d+)\\s*(?:%|percent)?",
+      "parameter": "r<"
+    },
+    {
+      "label": "chance of rain",
+      "regex": "(?:chance|probability|likelihood)\\s+of\\s+rain\\s*(?:>|over|above|greater\\s+than)?\\s*(\\d+)\\s*(?:%|percent)?",
+      "parameter": "r>"
+    }
+  ]
+}
+
+
