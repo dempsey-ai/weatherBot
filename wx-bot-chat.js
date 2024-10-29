@@ -30,13 +30,11 @@ weatherBot chat client - version 1.0 - Uses SimpleX Chat frameworkto provide wea
 
 //=====================================
 
+console.log(process.cwd());
 
 const {ChatClient} = require("simplex-chat")
 const {ChatType} = require("simplex-chat/dist/command")  
 const {ciContentText, ChatInfoType} = require("simplex-chat/dist/response")
-
-/*const { ChatClient, ChatType } = require("simplex-chat");
-const { ciContentText } = require("simplex-chat/dist/types");*/
 
 const wxBotFramework = require("./wx-bot-framework")
 const userManagement = require("./wx-bot-usermgmt")
