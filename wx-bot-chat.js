@@ -38,7 +38,7 @@ const {ciContentText, ChatInfoType} = require("simplex-chat/dist/response")
 
 const wxBotFramework = require("./wx-bot-framework")
 const userManagement = require("./wx-bot-usermgmt")
-require('dotenv').config();
+require('dotenv').config({ path: './weatherBot.env' });
 
 
 const DEBUG_MSG = "Debug: checkpoint";
@@ -66,7 +66,12 @@ async function run() {
   console.log(`Bot profile: ${user.profile.displayName} (${user.profile.fullName})`);
   
   const address = (await chat.apiGetUserAddress()) || (await chat.apiCreateUserAddress());
-  console.log(`Bot address: ${address}`);
+  //console.log(`Bot address: ${address}`);
+  
+  // Update WXBOT environment variable with bot address
+  process.env.WXBOT = address;
+  console.log(`Updated WXBOT environment variable: ${process.env.WXBOT}`);
+  
   
   await chat.enableAddressAutoAccept();
 

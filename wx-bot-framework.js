@@ -21,7 +21,7 @@ const natural = require('natural');
 const userManagement = require("./wx-bot-usermgmt")
 const wxBotProviderMap = require("./wxf-providers/wx-bot-provider-map")
 
-require('dotenv').config();
+require('dotenv').config({ path: './weatherBot.env' });
 const DEBUG_MSG = "Debug: checkpoint";
 const IS_DEBUG = process.env.DEBUG_MODE === 'true';
 

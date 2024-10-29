@@ -2,9 +2,9 @@
 source ~/.bashrc
 
 
-# uncomment the following lines if you need to use nvm to set the node version for your specific environment install
-# source ~/.nvm/nvm.sh
-# nvm use 20.9.0  # Ensure the correct version is used
+# use or comment the following lines if you need to use nvm to set the node version for your specific environment install
+source ~/.nvm/nvm.sh
+nvm use 20.9.0  # Ensure the correct version is used
 
 # which node
 # whereis node
@@ -26,17 +26,19 @@ echo "current directory: $(pwd)"
 # uncomment the while/done lines if you want to run the script in a loop to restart the applications if they exit
 
 #while true; do
+    # Load environment variables from weatherBot.env
+    export $(cat weatherBot.env | grep -v '^#' | xargs)
+
     # Start the first application with piped input
     if [ ! -f ./initcli.flag ]; then
         echo "initcli.flag NOT found, starting wxBot first time"
-	    echo "wxBot" | simplex-chat -p 5225 &
-   	    FIRST_APP_PID=$!
+        echo "wxBot" | simplex-chat -p ${SIMPLEX_CHAT_PORT:-5225} &
+        FIRST_APP_PID=$!
         touch ./initcli.flag  # Create the flag file here
     else
-        echo "Normal CLI start on port 5225"
-        simplex-chat -p 5225 &
+        echo "Normal CLI start on port ${SIMPLEX_CHAT_PORT:-5225}"
+        simplex-chat -p ${SIMPLEX_CHAT_PORT:-5225} &
         FIRST_APP_PID=$!
-
     fi
 
     # Wait for a few seconds
