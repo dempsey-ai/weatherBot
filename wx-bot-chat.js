@@ -32,6 +32,7 @@ weatherBot chat client - version 1.0 - Uses SimpleX Chat frameworkto provide wea
 
 console.log(process.cwd());
 
+const fs = require('fs');
 const {ChatClient} = require("simplex-chat")
 const {ChatType} = require("simplex-chat/dist/command")  
 const {ciContentText, ChatInfoType} = require("simplex-chat/dist/response")
@@ -41,8 +42,8 @@ const userManagement = require("./wx-bot-usermgmt")
 require('dotenv').config({ path: './weatherBot.env' });
 
 
-const DEBUG_MSG = "Debug: checkpoint";
 const IS_DEBUG = process.env.DEBUG_MODE === 'false';
+const APP_DATA = (process.env.APP_DATA || "./wx-bot-appdata").replace(/\/+$/, "");
 const SIMPLEX_CHAT_PORT = process.env.SIMPLEX_CHAT_PORT || 5225;
 
 const SHARE_BOT_ADDRESS = process.env.shareBotAddress === 'true';
@@ -70,7 +71,9 @@ async function run() {
   
   // Update WXBOT environment variable with bot address
   process.env.WXBOT = address;
-  console.log(`Updated WXBOT environment variable: ${process.env.WXBOT}`);
+  // Write to a volume-mounted file with quotes around the address value
+  fs.writeFileSync(`${APP_DATA}/wxbot.env`, `WXBOT="${address}"`);
+  console.log(`Updated WXBOT address in shared volume: "${address}"`);
   
   
   await chat.enableAddressAutoAccept();
