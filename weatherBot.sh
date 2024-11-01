@@ -27,6 +27,7 @@ if is_docker; then
         APP_HOME="${APP_HOME:-/home/appuser/weatherbot}"
         CLI_HOME="${CLI_HOME:-/home/appuser/cli}"
         APP_DATA="${APP_DATA:-$APP_HOME/wx-bot-appdata}"
+        VOL_DATA="${VOL_DATA:-$APP_HOME/config}"
         which node || {
         echo "Node.js not found"
         exit 1
@@ -36,9 +37,10 @@ if is_docker; then
 else
     # use or comment the following lines if you need to use nvm to set the node version for your specific environment install
     echo "Not running in Docker, setting up nvm"
-    APP_HOME="${APP_HOME:-./}"
+    APP_HOME="${APP_HOME:-.}"
     CLI_HOME="${CLI_HOME:-$HOME/.local/bin}"
     APP_DATA="${APP_DATA:-$APP_HOME/wx-bot-appdata}"
+    VOL_DATA="${VOL_DATA:-$APP_HOME/config}"
     source ~/.nvm/nvm.sh
     nvm use 20.9.0  # Ensure the correct version is used
 fi
@@ -52,6 +54,15 @@ cd $APP_HOME
 
 # openssl issue was due to bug in Simplex Chat install.sh logic
 # whereis libcrypto.so.1.1
+
+
+if [ -f "$VOL_DATA/my.env" ]; then
+    echo "Using configuration from $VOL_DATA/my.env"
+    cp -f "$VOL_DATA/my.env" "$APP_HOME/weatherBot.env"
+elif [ -f "$APP_HOME/.env-template" ]; then
+    echo "Using template configuration"
+    cp -f "$APP_HOME/.env-template" "$APP_HOME/weatherBot.env"
+fi
 
 
 if is_docker; then
