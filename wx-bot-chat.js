@@ -39,7 +39,8 @@ const {ciContentText, ChatInfoType} = require("simplex-chat/dist/response")
 
 const wxBotFramework = require("./wx-bot-framework")
 const userManagement = require("./wx-bot-usermgmt")
-require('dotenv').config({ path: './weatherBot.env' });
+const envPath = fs.existsSync('./config/my.env') ? './config/my.env' : './weatherBot.env';
+require('dotenv').config({ path: envPath });
 
 
 const IS_DEBUG = process.env.DEBUG_MODE === 'false';
