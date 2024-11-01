@@ -6,6 +6,9 @@ jest.config.js
 tsconfig.json
 .eslintrc.yml
 initcli.flag
+jed_agent.db
+jed_chat.db
+wxbot.env
 
 # Logs
 logs
