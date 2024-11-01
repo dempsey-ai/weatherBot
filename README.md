@@ -16,7 +16,7 @@ Enjoy having fun with weatherBot!
 
 ## weatherBot chat examples
 
-- location 29642 (set's the user's location for the weatherBot to a specific zipcode)
+- location 80809 (set's the user's location for the weatherBot to a specific zipcode)
 - location pikes peak,co (set's the user's location for the weatherBot to a specific city)
 - location label "vacation" (assign's a label to the user's previously set location details)
 - rain this week? (returns daily forecast when rain chance is over zero percent chance)
@@ -46,9 +46,11 @@ Enjoy having fun with weatherBot!
 
 ## Quick setup for Ubuntu 22.04
 
-1. Download the weatherBot code locally and change into the weatherBot directory from Terminal.
-2. Install node.js
-3. Install the following npm packages:
+### 1. Download the weatherBot code locally and change into the weatherBot directory from Terminal.
+
+### 2. Install node.js
+
+### 3. Install the following npm packages:
 
 ```
 npm i simplex-chat
@@ -57,7 +59,7 @@ npm i dotenv
 npm i natural
 ```
 
-4. Install the SimpleX Chat CLI:
+### 4. Install the SimpleX Chat CLI:
 
 **Note:** Install the SimpleX Chat CLI via `corrected` [install-simplex-cli.sh](./install-simplex-cli.sh) script.   
 
@@ -69,7 +71,7 @@ npm i natural
 bash install-simplex-cli.sh
 ```
 
-5. Build the project:
+### 5. Build the project:
 
 ``` 
 npm run build
@@ -82,19 +84,68 @@ You can customize the websocket port number by editing the `simplex-chat` comman
 **Note:** Additional customization options are available and documented in the `.env` file.
 > weatherBot uses word list files to determine what the user is asking for in their chat messages.  You can customize the word lists to change how the weatherBot interprets the user's chat messages.  They are technical in nature and require a good understanding of the weatherBot's code and specifically regex syntax.  However, the simplest change would be to add words to the `generalWords` array in the word list files which is what initially tells weatherBot what is primary weather subject to provide forecast data.  For example, if you want to use the word "wet" instead of "rain", you could edit the `rain.json` file to replace "rain" with "wet".  
 
-## Running weatherBot (using default port 5225)
+## Running weatherBot
 
-start `simplex-chat` as a server on port 5225: from terminal 1:
+There are two ways to run weatherBot:
+
+1. Manual Method (using default port 5225)
+2. Using the Automated Script, **weatherBot.sh**
+
+
+
+**Manual Method**
+
+Start `simplex-chat` as a server on port 5225: from terminal 1:
+
 ```
 simplex-chat -p 5225
 ```
 
-run `weatherBot`: from terminal 2:
+Run `weatherBot`: from terminal 2:
+
 ```
 node wx-bot-chat.js
 ```
 
-6. Connect to `weatherBot` via SimpleX Chat client using the address of the `wxBot` profile
+**Using the Automated Script**
+
+The `weatherBot.sh` script handles launching both applications automatically:
+> **Note:** May need to configure the script permissions to execute via file manager or by running `chmod +x weatherBot.sh`
+
+```
+./weatherBot.sh
+```
+
+#### Configuration
+
+The script supports two configuration methods:
+
+1. **Custom Configuration**: 
+   - Within the `config` folder in the application directory
+   - Copy `.env-template` from weatherBot folderto `config/my.env`
+   - Edit `my.env` with your desired settings
+   - Be sure to add your SimpleX address as the Host/Admin user (in quotes)
+   - The script will copy `config/my.env` to `weatherBot.env`
+
+2. **Default Configuration**:
+   - If no custom configuration exists, the script will copy `.env-template` to `weatherBot.env`
+
+    Example configuration:
+```
+HOST_CONTACT="simplex://...."  # Your SimpleX address here (in quotes)
+CHAT_PORT=5225                 # Default SimpleX chat port
+# ... other settings
+```
+
+The script will automatically:
+- Use your custom configuration if `config/my.env` exists
+- Fall back to `.env-template` if no custom configuration is found
+- Launch both the SimpleX chat server and the weatherBot application
+
+
+
+
+### 6. Connect to `weatherBot` via SimpleX Chat client using the address of the `wxBot` profile
 > **Note:** After starting the `weatherBot`, you can find the chatbot's address in the terminal output.  Copy the address and paste it into the SimpleX Chat client for a new chat connection.  The `weatherBot` will auto accept the connection and you are ready to chat!
 
 

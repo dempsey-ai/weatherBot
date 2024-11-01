@@ -43,11 +43,11 @@ const badWeatherData = require('../wx-bot-wordlists/bad_weather.json');
 const provWeatherGov = {
 
   provGeoData: [{
-    "geoID": '29685',
+    "geoID": '80809',
     "geoType": "loc-zip",
-    "geoData": "29685",
-    "forecast": "https://api.weather.gov/gridpoints/GSP/48,46/forecast",
-    "alert": "https://api.weather.gov/alerts?point=34.95819%2C-82.84185&status=actual&message_type=alert"
+    "geoData": "80809",
+    "forecast": "https://api.weather.gov/gridpoints/PUB/84,95/forecast",
+    "alert": "https://api.weather.gov/alerts?point=38.91181%2C-104.98553&status=actual&message_type=alert"
   },
   {
     "geoID": "pikespeak",
