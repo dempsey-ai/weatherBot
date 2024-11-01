@@ -73,24 +73,41 @@ fi
     # Start the first application with piped input
     if [ ! -f ./initcli.flag ]; then
         echo "initcli.flag NOT found, starting wxBot first time"
-        echo "wxBot" | $CLI_HOME/simplex-chat --log-file $APP_DATA/simplelog.log -l error -p ${SIMPLEX_CHAT_PORT:-5225} -d $APP_DATA/jed &
+        echo "wxBot" | $CLI_HOME/simplex-chat -l error -p ${SIMPLEX_CHAT_PORT:-5225} -d $APP_DATA/jed &
         FIRST_APP_PID=$!
         touch ./initcli.flag  # Create the flag file here
     else
         echo "Normal CLI start on port ${SIMPLEX_CHAT_PORT:-5225}"
-        $CLI_HOME/simplex-chat --log-file $APP_DATA/simplelog.log -l error -p ${SIMPLEX_CHAT_PORT:-5225} -d $APP_DATA/jed &
+        $CLI_HOME/simplex-chat -l error -p ${SIMPLEX_CHAT_PORT:-5225} -d $APP_DATA/jed &
         FIRST_APP_PID=$!
     fi
 
-    # Wait for a few seconds
-    # sleep 300
     echo "Starting wx-bot-chat.js"
-    sleep 1
-    # Start the second application
-    node wx-bot-chat.js &
-    SECOND_APP_PID=$!
+    sleep 3
+    # Try starting node application with retry
+    MAX_RETRIES=2
+    RETRY_COUNT=0
+    while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+        node wx-bot-chat.js &
+        SECOND_APP_PID=$!
+        
+        # Wait a moment to see if it stays running
+        sleep 10
+        if kill -0 $SECOND_APP_PID 2>/dev/null; then
+            echo "wx-bot-chat.js started successfully"
+            break
+        else
+            echo "wx-bot-chat.js failed to start, retrying..."
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            [ $RETRY_COUNT -lt $MAX_RETRIES ] && sleep 10
+        fi
+    done
 
-    # sleep 300
+    if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+        echo "Failed to start wx-bot-chat.js after $MAX_RETRIES attempts"
+        exit 1
+    fi
+
     # Wait for either application to exit
     wait -n $FIRST_APP_PID $SECOND_APP_PID
 
