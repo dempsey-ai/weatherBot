@@ -34,7 +34,7 @@
     },
     {
       "label": "setting location label",
-      "regex": "(?:set\\s+)?location\\s+(?:label|name)(?:\\s+to)?\\s+\"([^\"]+)\"",
+      "regex": "(?:set\\s+)?location\\s+(?:label|name)\\s*(?:to\\s+)?(?:\"([^\"]+)\"|([^\"\\n]+)$)",
       "parameter": "loc-label:"
     }
   ]

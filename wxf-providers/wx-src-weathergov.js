@@ -504,13 +504,13 @@ alertIsCurrent: {
       }
     } //end loop
     if (!gotResponse) {
-      return {isValid: false, errMsg: ErrorMsg, wxaData: undefined}
+      return {isValid: false, errMsg: ErrorMsg, wxaData: []}
     }
   
     freshWeatherResults = JSON.parse(response.data)
   
     if ((freshWeatherResults.features == undefined ? 0 : freshWeatherResults.features.length) == 0) {
-      return undefined
+      return {isValid: true, Msg: "no alerts returned from weather.gov", wxaData: []}
     }
   
     let cacheTime = Date.now()

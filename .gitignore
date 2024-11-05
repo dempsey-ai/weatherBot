@@ -9,6 +9,7 @@ initcli.flag
 jed_agent.db
 jed_chat.db
 wxbot.env
+my.env
 
 # Logs
 logs
