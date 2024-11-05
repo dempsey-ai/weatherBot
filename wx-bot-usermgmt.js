@@ -28,7 +28,6 @@ const updateWxUsers = async (wxUsers, chatInfo, forceHost = false) => {
   let chatTypeAsDec = chatInfo.type == ChatInfoType.Direct ? 0.1 : 0.2;
 
   let wxUserId = userId + chatTypeAsDec;
-  //console.log("wxUserId:" + wxUserId  );
 
   if (!wxUsers[wxUserId]) {
     let displayName = '';

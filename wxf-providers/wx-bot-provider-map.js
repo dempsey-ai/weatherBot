@@ -22,6 +22,15 @@ const weatherGov = require("./wx-src-weathergov");
 // then append to the url
 // then open in browser
 
+require('dotenv').config({ path: '../weatherBot.env' });
+const IS_DEBUG = process.env.DEBUG_MODE === 'true';
+
+const debugLog = (msg) => {
+  if (IS_DEBUG) {
+      console.log(msg);
+  }
+  return;
+}
 
 // PROVIDER MAP TEMPLATE:
 const wxProviderFunctions = {
@@ -54,7 +63,7 @@ const wxProviderFunctions = {
 
   
   getProvForecastData: async (wxChatUser) => {
-    console.log("getProvForecastsData function called...")
+    debugLog("getProvForecastsData function called...")
     // Implement logic to get forecast data from the appropriate provider
     let result = false;
 
@@ -62,7 +71,7 @@ const wxProviderFunctions = {
         // Extract location information from wxChatUser
         const userLocation = wxChatUser.location;
         if (!userLocation) {
-          console.log("No location information available for user");
+          debugLog("No location information available for user");
           return null;
         }
     
@@ -78,7 +87,6 @@ const wxProviderFunctions = {
     const getWXF_result = await weatherGov.provWeatherGov.getWXF(existingLocation.forecast, false, true);
     if (getWXF_result.isValid) {
       result = true;    // replace with actual logic
-      //console.log("getWXF_result_data: " + JSON.stringify(getWXF_result.wxfData, null, 3))
       return {isValid: result, wxfData: getWXF_result.wxfData};
     }
 
@@ -93,13 +101,13 @@ const wxProviderFunctions = {
 
   
   getProvPolyMapURL: async (wxChatUser) => {
-    console.log("getProvPolyMapURL function called...")
+    debugLog("getProvPolyMapURL function called...")
     let result = false;
 
         // Extract location information from wxChatUser
         const userLocation = wxChatUser.location;
         if (!userLocation) {
-          console.log("No location information available for user");
+          debugLog("No location information available for user");
           return null;
         }
     
@@ -114,7 +122,6 @@ const wxProviderFunctions = {
 
     if (getPolyMapURL_result.isValid) {
       result = true;    // replace with actual logic
-      //console.log("getWXF_result_data: " + JSON.stringify(getWXF_result.wxfData, null, 3))
       return {isValid: result, polyURL: getPolyMapURL_result.polyURL};
     }
 
@@ -134,7 +141,7 @@ const wxProviderFunctions = {
         // Extract location information from wxChatUser
         const userLocation = wxChatUser.location;
         if (!userLocation) {
-          console.log("No location information available for user");
+          debugLog("No location information available for user");
           return null;
         }
     
@@ -151,7 +158,6 @@ const wxProviderFunctions = {
     const getWXA_result = await weatherGov.provWeatherGov.getWXA(existingLocation.alert, true);
     if (getWXA_result.isValid) {
       result = true;    // replace with actual logic
-      //console.log("getWXF_result_data: " + JSON.stringify(getWXF_result.wxfData, null, 3))
     // return cleaned data
     return {isValid: result, wxaData: getWXA_result.wxaData};
     }
@@ -170,7 +176,7 @@ const wxProviderFunctions = {
     // TODO: ADD LOGIC TO GET TEMPERATURE DATA FROM THE APPROPRIATE PROVIDER
     let newGeoData = await weatherGov.provWeatherGov.createGeoData (userLocation.label, userLocation.type, userLocation.value) 
   
-    //console.log("newGeoData: " + JSON.stringify(newGeoData, null, 3))
+    debugLog("newGeoData: " + JSON.stringify(newGeoData, null, 3))
   
     // add the newGeoData to the global list of geoData
   
@@ -183,7 +189,7 @@ const wxProviderFunctions = {
     // Extract location information from wxChatUser
     const userLocation = wxChatUser.location;
     if (!userLocation) {
-      console.log("No location information available for user");
+      debugLog("No location information available for user");
       return null;
     }
 
@@ -194,7 +200,7 @@ const wxProviderFunctions = {
     // Check if location already exists in provGeoData
     const existingLocation = wxProviderFunctions.provGeoData.find(loc => loc.geoID === locID);
 if (existingLocation) {
-      console.log(`Location ${locID} already exists in provGeoData`);
+      debugLog(`Location ${locID} already exists in provGeoData`);
       return existingLocation;
     }
 
@@ -214,7 +220,6 @@ if (existingLocation) {
       return null;
     }
 
-    ///console.log("updated provGeoData: " + JSON.stringify(this.provGeoData, null, 3))
 
 
   }

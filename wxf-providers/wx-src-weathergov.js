@@ -26,19 +26,18 @@
   }],
 */
 
-
-//  TODO: 
-// 1. BUILD THE WEATHER.GOV SPECIFIC FUNCTIONS TO FETCH THE WEATHER DATA FOR THE LOCATION
-// 2. BUILD THE WEATHER.GOV SPECIFIC FUNCTIONS TO CONVERT THE RAW WEATHER DATA TO THE STANDARD WEATHER SOURCE FORMAT FOR THE BOT FRAMEWORK
-
 const axios = require("axios").default
 const badWeatherData = require('../wx-bot-wordlists/bad_weather.json');
 
-// these will be the global variables based on the active provider map based on this specific provider
-// var wxfDataSet = wxBotProviderMap.activeProvider.wxfTemplate;
-// var wxfProvGeoData = wxBotProviderMap.activeProvider.provGeoData;
-// var wxfProvRawData = wxBotProviderMap.activeProvider.provGeoData;
+require('dotenv').config({ path: '../weatherBot.env' });
+const IS_DEBUG = process.env.DEBUG_MODE === 'true';
 
+const debugLog = (msg) => {
+  if (IS_DEBUG) {
+      console.log(msg);
+  }
+  return;
+}
 
 const provWeatherGov = {
 
@@ -161,9 +160,6 @@ const provWeatherGov = {
 
   timeLimit: 3600000 * 1, // = 60min   //1702555872762 - 1702519101950
 
-//let cacheTime = 0  //1702519101950  //1702555872762
-//let hasExpired = (Date.now() - cacheTime) > timeLimit
-//console.log("WXF cache has expired= "+ hasExpired )
 
   milliseconds: Date.now(), //1702555872762 - 1702519101950
 
@@ -175,11 +171,7 @@ const provWeatherGov = {
   return [hours.toString().padStart(2, "0"), minutes.toString().padStart(2, "0"), seconds.toString().padStart(2, "0")].join(":")
 },
 
-//const formattedTime = formatTime(milliseconds);
-//console.log( formattedTime )
-//---------------------------------------------------------------------------
 
-// if (alertIsCurrent[userOperator](expireISOdate) ) {do something}
 alertIsCurrent: {
   ">=": function (expireISOdate) {
     try {
@@ -196,7 +188,7 @@ alertIsCurrent: {
       const todayDate = todaySplit[0].concat(todaySplit[1], todaySplit[2])
       return expDate >= todayDate
     } catch (err) {
-      console.log(err)
+      debugLog(err)
       return true
     } //if any error, return true to include alerts regardlessv
   }, //end of first function
@@ -204,11 +196,6 @@ alertIsCurrent: {
     return isA <= thanB
   },
 }, //end var/function
-
-//let localDate = new Date().toLocaleDateString("en-US");
-//console.log("localDate= "+localDate); // 17.6.2022
-
-// .toLocaleTimeString
 
 
   sleep: async (manySecs) => {
@@ -232,17 +219,16 @@ alertIsCurrent: {
       let isThrottled = JSON.parse(response.data)
 
       if (checkThrottled && /(throttled)/.test(isThrottled.latt.toLowerCase())) {
-        console.log("isThrottled stuff...." + JSON.stringify(isThrottled, null, 3))
+        debugLog("isThrottled stuff...." + JSON.stringify(isThrottled, null, 3))
         throw "Throttle issue happened"
       } // generates an exception
 
-      //console.log("got response.... "+JSON.stringify(bob.features,null,3))
     } catch (err) {
-      console.log("in catch..." + i)
+      debugLog("in catch..." + i)
       if (err.response !== undefined) {
-        console.log(err.response.data.error)
+        debugLog(err.response.data.error)
       } else {
-        console.log("in catch err..." + err)
+        debugLog("in catch err..." + err)
       }
 
       gotResponse = false
@@ -251,7 +237,7 @@ alertIsCurrent: {
     if (gotResponse || !keepTrying) {
       break
     }
-    console.log("Trying axios call again loop..." + i)
+    debugLog("Trying axios call again loop..." + i)
     if (i == 9) {
       ErrorMsg = "final axios URL fail...looping out of max retries"
     }
@@ -276,7 +262,7 @@ alertIsCurrent: {
   //              alert: "https://api.weather.gov/alerts?point=" + "38.8408655" + "%2C" + "-105.0441532" + "&status=actual&message_type=alert"
 
 
-  console.log("createGeoData: locLabel= " + locLabel + " geoType= " + geoType + " geoData= " + geoData)
+  debugLog("createGeoData: locLabel= " + locLabel + " geoType= " + geoType + " geoData= " + geoData)
 
   let retGeoData = {
     "geoID": locLabel,
@@ -302,11 +288,11 @@ alertIsCurrent: {
     geoLatLon.latt = geoSplit[0]
     geoLatLon.longt = geoSplit[1]
   } else if (geoType == "loc-city") {
-    console.log("https://geocode.xyz/" + geoData + "?region=us&json=1")
+    debugLog("https://geocode.xyz/" + geoData + "?region=us&json=1")
 
     geoLatLon = await provWeatherGov.axiosLoop("https://geocode.xyz/" + geoData + "?region=us&json=1", true, true)
   } else if (geoType == "loc-zip") {
-    console.log("https://geocode.xyz/" + geoData + "?region=us&json=1")
+    debugLog("https://geocode.xyz/" + geoData + "?region=us&json=1")
 
     geoLatLon = await provWeatherGov.axiosLoop("https://geocode.xyz/" + geoData + "?region=us&json=1", true, true)
   }
@@ -314,14 +300,9 @@ alertIsCurrent: {
   const wxaURL = "https://api.weather.gov/alerts?point=" + geoLatLon.latt + "%2C" + geoLatLon.longt + "&status=actual&message_type=alert"
 
   let gspURL = "https://api.weather.gov/points/" + geoLatLon.latt + "," + geoLatLon.longt
-  console.log(gspURL)
+  debugLog(gspURL)
 
   geoGSP = await provWeatherGov.axiosLoop(gspURL, true, false)
-
-  //console.log(geoLatLon)
-  //console.log(geoLatLon.latt+", "+geoLatLon.longt)
-  //console.log(geoGSP.properties.forecast)
-
 
 
   retGeoData = {
@@ -333,16 +314,7 @@ alertIsCurrent: {
     "polyMapURL": "https://www.keene.edu/campus/maps/tool/?coordinates=" + "lon1,lat1" + "%0A" + "lon2,lat2" + "%0A" + "lon3,lat3" + "%0A" + "lon4,lat4" 
   }
 
-  //wxFiles.geoData.content.push(retGeoData.geoID)
-  //console.log("wxFiles.geoData.content.... "+JSON.stringify(wxFiles.geoData.content,null,3))
-  //console.log("wxFile filename info.... " + wxFiles.dataPath + wxFiles.geoData.fileName)
-
-  //let createRegardless = true
-  //await fsWriteFile(createRegardless, wxFiles.dataPath + wxFiles.geoData.fileName, JSON.stringify(wxFiles.geoData.content, null, 3))
-
   return {isValid: true, newGeoID: retGeoData}
-
-  //return {result: result, preMsg: preMsg, latt: geoLatLon.latt, lont: geoLatLon.longt, wxfURL: geoGSP.properties.forecast, wxaURL: wxaURL}
   },
 
 
@@ -366,7 +338,7 @@ alertIsCurrent: {
     geoBlock = provWeatherGov.provCacheData.find((gArr) => gArr.wxfURL == wxfURL)
   
     if ((geoBlock == undefined ? 0 : geoBlock.length) == 0 || forceRefresh || Date.now() - geoBlock.refDateTimeInt > provWeatherGov.timeLimit) {
-      console.log("geoID not found or past cacheLimit or forcing refresh requested")
+      debugLog("geoID not found or past cacheLimit or forcing refresh requested")
       geoBlock = []
       useCache = false
     } else {
@@ -374,20 +346,19 @@ alertIsCurrent: {
     }
   
     if (geoBlock.wxfURL !== undefined) {
-      console.log("cache calc info...timeLimit..." + provWeatherGov.timeLimit + "....geoBlock...." + geoBlock.refDateTimeInt)
-      console.log("cache calc info...minus calc " + (Date.now() - parseInt(geoBlock.refDateTimeInt)))
-      console.log("cache calc info ..new calc... " + (Date.now() - parseInt(geoBlock.refDateTimeInt) > provWeatherGov.timeLimit))
-      console.log("cache calc info...orig calc... " + (Date.now() - parseInt(geoBlock.refDateTimeInt) > provWeatherGov.timeLimit))
+      debugLog("cache calc info...timeLimit..." + provWeatherGov.timeLimit + "....geoBlock...." + geoBlock.refDateTimeInt)
+      debugLog("cache calc info...minus calc " + (Date.now() - parseInt(geoBlock.refDateTimeInt)))
+      debugLog("cache calc info ..new calc... " + (Date.now() - parseInt(geoBlock.refDateTimeInt) > provWeatherGov.timeLimit))
+      debugLog("cache calc info...orig calc... " + (Date.now() - parseInt(geoBlock.refDateTimeInt) > provWeatherGov.timeLimit))
     }
   
-    console.log("checked use cache and result is......useCache= " + useCache)
+    debugLog("checked use cache and result is......useCache= " + useCache)
     if (useCache) {
-      console.log("using Cache that becomes wxfVert with")
-      //console.log("using Cache that becomes wxfVert with...... geoBlock= "+ JSON.stringify(geoBlock,null,3) )
+      debugLog("using Cache that becomes wxfVert")
       return {isValid: true, wxfData: geoBlock}
     }
   
-    console.log("Not using Cache, now going to reach out to Weather.gov...")
+    debugLog("Not using Cache, now going to reach out to Weather.gov...")
     //no cache or out of date, flush it before adding current get
     let gotResponse = false
     for (var i = 0; i < 10; i++) {
@@ -403,14 +374,14 @@ alertIsCurrent: {
           gotResponse = true
         }
       } catch (err) {
-        console.log(err)
+        debugLog(err)
         gotResponse = false
         //return {result: wxErrorMsg, wxfData: undefined}
       }
       if (gotResponse || !keepTrying) {
         break
       }
-      console.log("Trying Weather.gov again loop..." + i)
+      debugLog("Trying Weather.gov again loop..." + i)
       if (i == 9) {
         ErrorMsg = "final Weather.gov fail...looping out of max retries"
       }
@@ -425,7 +396,6 @@ alertIsCurrent: {
     }
   
     freshWeatherResults = JSON.parse(response.data)
-    //console.log(datas.properties.periods[0].name)
   
     if ((freshWeatherResults.properties.periods == undefined ? 0 : freshWeatherResults.properties.periods.length) == 0)
       return {isValid: false,errMsg: "no periods returned from weather.gov", wxfData: undefined}
@@ -504,7 +474,7 @@ alertIsCurrent: {
   
     let wxaFlat = []
   
-    console.log("Never hold Alert Cache, now going to reach out to Weather.gov for..." + wxfURL)
+    debugLog("Never hold Alert Cache, now going to reach out to Weather.gov for..." + wxfURL)
     //no cache or out of date, flush it before adding current get
     let gotResponse = false
     for (var i = 0; i < 10; i++) {
@@ -514,18 +484,16 @@ alertIsCurrent: {
           transformResponse: [(v) => v],
         })
         gotResponse = true
-        //let bob = JSON.parse(response.data)
-        //console.log("got response.... "+JSON.stringify(bob.features,null,3))
       } catch (err) {
-        console.log("in catch..." + i)
-        console.log(err.response.data.error)
+        debugLog("in catch..." + i)
+        debugLog(err.response.data.error)
         gotResponse = false
         //return {result: wxErrorMsg, wxfData: undefined}
       }
       if (gotResponse || !keepTrying) {
         break
       }
-      console.log("Trying Weather.gov again loop..." + i)
+      debugLog("Trying Weather.gov again loop..." + i)
       if (i == 9) {
         ErrorMsg = "final Weather.gov fail...looping out of max retries"
       }
@@ -540,14 +508,13 @@ alertIsCurrent: {
     }
   
     freshWeatherResults = JSON.parse(response.data)
-    //console.log(freshWeatherResults.features)
   
     if ((freshWeatherResults.features == undefined ? 0 : freshWeatherResults.features.length) == 0) {
       return undefined
     }
   
     let cacheTime = Date.now()
-    console.log("cacheTime...." + cacheTime)
+    debugLog("cacheTime...." + cacheTime)
     let validWeather = []
     freshWeatherResults.features.forEach(function (pedValue, pedKey) {
       const wxaFlat = {
@@ -568,8 +535,6 @@ alertIsCurrent: {
     }) // end of forEach loop
   
 
-    //result = {result: true, wxReport: validWeather}
-    //console.log("wxa Alerts result.... " + JSON.stringify(validWeather, null, 3))
     return {isValid: true, wxaData: validWeather} 
   }, //end of function
   
@@ -577,7 +542,7 @@ alertIsCurrent: {
 
 
   getPolyMapURL: async (PwxfURL, PforceRefresh, PkeepTrying) => {
-    console.log("getPolyMapURL function called...")
+    debugLog("getPolyMapURL function called...")
     // get the polygon coordinates from the provGeoData
     const pikesPeakForecast = provWeatherGov.provGeoData.find(loc => loc.geoID === "pikespeak")?.forecast;
     // Set wxfURL to Pikes Peak forecast if PwxfURL is undefined
@@ -604,14 +569,14 @@ alertIsCurrent: {
           gotResponse = true
         }
       } catch (err) {
-        console.log(err)
+        debugLog(err)
         gotResponse = false
         //return {result: wxErrorMsg, wxfData: undefined}
       }
       if (gotResponse || !keepTrying) {
         break
       }
-      console.log("Trying Weather.gov again loop..." + i)
+      debugLog("Trying Weather.gov again loop..." + i)
       if (i == 9) {
         ErrorMsg = "final Weather.gov fail...looping out of max retries"
       }
@@ -626,7 +591,6 @@ alertIsCurrent: {
     }
   
     freshWeatherResults = JSON.parse(response.data)
-    //console.log(datas.properties.periods[0].name)
   
     if ((freshWeatherResults.geometry == undefined ? 0 : freshWeatherResults.geometry.coordinates.length) == 0)
       return {isValid: false,errMsg: "no coordinates returned from weather.gov", wxfData: undefined}

@@ -1,7 +1,14 @@
 # SimpleX Chat weatherBot as a service
 
-This is a weatherBot chat client that uses javascript WebSocket API client from [SimpleX Chat terminal CLI](https://github.com/simplex-chat/simplex-chat/blob/stable/docs/CLI.md) along with `node.js` to run the typescript package from `Simplex Chat SDK`
 
+This is a personal weather chat bot service that is built on the SimpleX Chat framework.  It communicates with the SimpleX Chat server using the WebSocket API client from [SimpleX Chat terminal CLI](https://github.com/simplex-chat/simplex-chat/blob/stable/docs/CLI.md).  The weatherBot service is a `node.js` application utilizing their `Simplex Typescript SDK` to accept connection requests from users, get messages from SimpleX SMP servers, and send messages back to the users.  
+
+**Note:** This weatherBot service is a personal project of mine that started as an example of a chat bot service built on the SimpleX Chat framework.  It has since evolved into a project that was completely rewriten using the [Cursor AI IDE](https://www.cursor.com/) to explore using AI integrated development tools.  The resulting rewrite was about 1/3 less lines of code, increased functionality through advanced use of the same underlying code technology, increased flexibility of underlying service provider integration, and ultimately further down the application roadmap in less time.  It has been an eye opening experience and I am encouraged by this first hand experience and what it should mean to every single organization that uses software solutions both internally and as delivered products.  This codebase is not meant to be an example of any particular code solution, best practices, styles, etc, of software engineering.  However, the delivery of a working example is the proof itself of using AI IDE integration from start to finish.  Further, the use of Cursor AI surpassed the initial laptop running, prototype capability into a functioning, delivered [Docker Hub image](https://hub.docker.com/r/dempsey0ai/weatherbot/tags) build as well as a custom [Start9os installable application](https://marketplace.start9.com/?%2Fmedia=communcations) to host the weatherBot service on a dedicated cloud appliance. The best way to describe having AI IDE is to say it is **relentlessly helpful** and you are only limited by your willingness to keep working the solution.  AI is that friend that always takes your phone call, always knows the subject matter, never passes you off to someone else, never pretends to be busy, and always has time to work endlessly on your issue with no hard stops.
+
+
+The weatherBot service takes a user's chat messages, interprets the user's intent, and then fetches the weather data from a weather service provider.  The daily weather forecast data is then converted to a simple, concise format and returned to the user in a SimpleX chat message reply.  
+
+The goal of the weatherBot is to provide a useful, working example demonstrating a method to interact with an underlying product service provider (in this case, a weather service) through a chat bot service which provides a layer of abstraction between the user and the product service provider.  Instead of the user being the product consumed by the service provider, the user is the consumer of the chat bot service which then consumes the product of the service provider.  Using SimpleX Chat's SMP server framework provides the ultimate example of privacy and security by separating the user's identity from the product service provider.  The weatherBot service is a simple example of a chat bot service that can be extended and customized to provide a wide variety of services to SimpleX Chat users.  
 
 
 ## weatherBot features
@@ -15,6 +22,8 @@ Enjoy having fun with weatherBot!
 
 
 ## weatherBot chat examples
+
+The purpose of using a chat bot style interaction is to support natural language, simple chats from the user.  The following examples are not meant to dictate a strict syntax format, but examples of keys words that the weatherBot will understand and respond.  The user may or may not use punctuation or more or less words than the examples.  In my experience, the chats will trend towards fewer words, but hopefully catch the user's intention during their early interactions of learning the weatherBot's capabilities.
 
 - location 80809 (set's the user's location for the weatherBot to a specific zipcode)
 - location pikes peak,co (set's the user's location for the weatherBot to a specific city)
@@ -48,9 +57,16 @@ Enjoy having fun with weatherBot!
 
 ### 1. Download the weatherBot code locally and change into the weatherBot directory from Terminal.
 
-### 2. Install node.js
+### 2. Install yq (can use wget instead of curl)
 
-### 3. Install the following npm packages:
+```
+sudo curl -L https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -o /usr/bin/yq
+sudo chmod +x /usr/bin/yq
+```
+
+### 3. Install node.js
+
+### 4. Install the following npm packages:
 
 ```
 npm i simplex-chat

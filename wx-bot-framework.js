@@ -22,9 +22,7 @@ const userManagement = require("./wx-bot-usermgmt")
 const wxBotProviderMap = require("./wxf-providers/wx-bot-provider-map")
 
 require('dotenv').config({ path: './weatherBot.env' });
-const DEBUG_MSG = "Debug: checkpoint";
 const IS_DEBUG = process.env.DEBUG_MODE === 'true';
-
 
 const chatTeal = (someString) => {
   return (someString = " !5 " + someString + "! ")
@@ -65,6 +63,13 @@ const tempHot = (currentMonth >= 6 && currentMonth <= 9)
   const tempCold = process.env.tempCold || 50;
 
 
+const debugLog = (msg) => {
+    if (IS_DEBUG) {
+        console.log(msg);
+    }
+    return;
+  }
+
 
 const cleanupString = (str) => {
   // First, replace two or more spaces with a single space
@@ -80,7 +85,7 @@ const cleanupString = (str) => {
 const logFunctionName = () => {
   const stack = new Error().stack;
   const callerName = stack.split('\n')[2].trim().split(' ')[1];
-  console.log(`Currently inside function: ${callerName}`);
+  debugLog(`Currently inside function: ${callerName}`);
 };
 
 // Load word lists
@@ -145,7 +150,7 @@ const evaluateMessage = async (wxChatUser, msg) => {
 
 
   let bestMatchingTopic = await findBestMatchingTopic(lowercaseMsg, weatherTopics);
-  console.log(`Best matching topic: ${bestMatchingTopic}`);
+  debugLog(`Best matching topic: ${bestMatchingTopic}`);
 
   if (bestMatchingTopic == undefined || bestMatchingTopic == null) {
     // double check for special temp short hand that word compare won't catch
@@ -155,10 +160,10 @@ const evaluateMessage = async (wxChatUser, msg) => {
         lowercaseMsg.match("^\\>\\s*(\\d+)") || 
       lowercaseMsg.match("\\?\\>\\s*(\\d+)")    );
 
-    console.log('regex <35...' + lowercaseMsg.match("^\\<\\s*(\\d+)"))
+      debugLog('regex <35...' + lowercaseMsg.match("^\\<\\s*(\\d+)"))
 
     if (special_match) {
-      console.log("found special_match, setting topic")
+      debugLog("found special_match, setting topic")
       bestMatchingTopic = 'topic_temps';
     }
   }
@@ -167,7 +172,7 @@ const evaluateMessage = async (wxChatUser, msg) => {
   let msg_criteria = msg_subject;
   let ret_isValid = false;
   let ret_qualifiedParameter = undefined;
-  let ret_inValidReason = "Couldn't determine weather subject. Please try rephrasing your request.  ex. 'rain?' or 'rain saturday?' or 'cool temps?'"
+  let ret_inValidReason = "Couldn't determine weather subject. Please try rephrasing your request, using different key words.  ex. 'rain?' or 'weather saturday?' or 'cool temps?'"
 
   let eval_result = {
     isValid: ret_isValid,
@@ -187,7 +192,7 @@ const evaluateMessage = async (wxChatUser, msg) => {
         for (const criteria of weatherTopics.topic_hostFunctions.specificCriteria) {
           const regex = new RegExp(criteria.regex, 'i');
           const match = lowercaseMsg.match(regex);
-          console.log("match=" + JSON.stringify(match));
+          debugLog("match=" + JSON.stringify(match));
           if (match) {
             ret_isValid = true;
             msg_subject = 'hostfunction';
@@ -229,7 +234,7 @@ const evaluateMessage = async (wxChatUser, msg) => {
       break;
      
     case 'topic_location':
-      console.log("The topic is related to location.");
+      debugLog("The topic is related to location.");
       // Add your logic for location here
       ret_isValid = false;
       ret_qualifiedParameter = undefined;
@@ -240,11 +245,11 @@ const evaluateMessage = async (wxChatUser, msg) => {
       for (const criteria of weatherTopics.topic_location.specificCriteria) {
         const regex = new RegExp(criteria.regex, 'i');
         const match = lowercaseMsg.match(regex);
-        if (match) {console.log("in forloop...match="+match[1]); }
+        if (match) {debugLog("in forloop...match="+match[1]); }
         
         if (match) {
           ret_isValid = true;
-          console.log("in forloop...ret_isValid="+ret_isValid);
+          debugLog("in forloop...ret_isValid="+ret_isValid);
           ret_qualifiedParameter = criteria.parameter;
           msg_criteria = criteria.label
       
@@ -267,8 +272,6 @@ const evaluateMessage = async (wxChatUser, msg) => {
           break;
         }
       }
-      //console.log("break from forloop...ret_isValid="+ret_isValid);
-      // If no specific criteria matched, report daily temps
 
       ret_isValid = true;
       eval_result = {
@@ -279,14 +282,10 @@ const evaluateMessage = async (wxChatUser, msg) => {
         inValidReason: ret_isValid ? '' : ret_inValidReason
       };
       
-      //+JSON.stringify(results,null,3)
-      
       break;
 
-
-
-    case 'topic_badWeather':
-      console.log("The topic is related to badWeather.");
+      case 'topic_badWeather':
+        debugLog("The topic is related to badWeather.");
       // Add your logic for badWeather here
       ret_isValid = false;
       ret_qualifiedParameter = undefined;
@@ -297,7 +296,7 @@ const evaluateMessage = async (wxChatUser, msg) => {
       // pass the list of bad weather words to search for in wxfData forecasts
         ret_isValid = true;
         ret_qualifiedParameter = weatherTopics.topic_badWeather.specificCriteria[0].parameter; 
-        //console.log("bad words list: " + ret_qualifiedParameter)
+        debugLog("bad words list: " + ret_qualifiedParameter)
      
       eval_result = {
         isValid: ret_isValid,
@@ -310,7 +309,7 @@ const evaluateMessage = async (wxChatUser, msg) => {
       break;
       
     case 'topic_wxAlerts':
-      console.log("The topic is related to wxAlerts.");
+      debugLog("The topic is related to wxAlerts.");
       // Add your logic for wxAlerts here
       ret_isValid = false;
       ret_qualifiedParameter = undefined;
@@ -333,7 +332,7 @@ const evaluateMessage = async (wxChatUser, msg) => {
       break;
       
     case 'topic_temps':
-      console.log("The topic is related to temp.");
+      debugLog("The topic is related to temp.");
       // Add your logic for temp here
       ret_isValid = false;
       ret_qualifiedParameter = undefined;
@@ -344,11 +343,11 @@ const evaluateMessage = async (wxChatUser, msg) => {
       for (const criteria of weatherTopics.topic_temps.specificCriteria) {
         const regex = new RegExp(criteria.regex, 'i');
         const match = lowercaseMsg.match(regex);
-        if (match) {console.log("in forloop...match="+match[1]); }
+        if (match) {debugLog("in forloop...match="+match[1]); }
         
         if (match) {
           ret_isValid = true;
-          console.log("in forloop...ret_isValid="+JSON.stringify(match));
+          debugLog("in forloop...ret_isValid="+JSON.stringify(match));
           ret_qualifiedParameter = criteria.parameter;
           msg_criteria = criteria.label
       
@@ -360,8 +359,6 @@ const evaluateMessage = async (wxChatUser, msg) => {
           break;
         }
       }
-      //console.log("break from forloop...ret_isValid="+ret_isValid);
-      // If no specific criteria matched, report daily temps
 
       ret_isValid = true;
       eval_result = {
@@ -372,12 +369,10 @@ const evaluateMessage = async (wxChatUser, msg) => {
         inValidReason: ret_isValid ? '' : ret_inValidReason
       };
       
-      //+JSON.stringify(results,null,3)
-      
       break;
       
     case 'topic_rain':
-      console.log("The topic is related to rain.");
+      debugLog("The topic is related to rain.");
       // Add your logic for rain here
       ret_isValid = false;
       ret_qualifiedParameter = undefined;
@@ -419,7 +414,7 @@ const evaluateMessage = async (wxChatUser, msg) => {
 
       break;
     case 'topic_wind':
-      console.log("The topic is related to wind.");
+      debugLog("The topic is related to wind.");
       // Add your logic for wind here
       ret_isValid = false;
       ret_qualifiedParameter = undefined;
@@ -462,7 +457,7 @@ const evaluateMessage = async (wxChatUser, msg) => {
       break;
       
     case 'topic_wxForecasts':
-      console.log("The topic is related to wxForecasts.");
+      debugLog("The topic is related to wxForecasts.");
       // Add your logic for wxForecasts here
       ret_isValid = false;
       ret_qualifiedParameter = undefined;
@@ -481,10 +476,10 @@ const evaluateMessage = async (wxChatUser, msg) => {
           // If there's a captured group (search term), add it to the parameter
           if (match[1]) {
             if (ret_qualifiedParameter.action.toLowerCase() === "ndays") {
-              console.log("nDays match:", match);
+              debugLog("nDays match:", match);
               ret_qualifiedParameter.numOfDays = parseInt(match[1]);
             } else if (ret_qualifiedParameter.action.toLowerCase() === "search") {
-              console.log("search match:", match);
+              debugLog("search match:", match);
               ret_qualifiedParameter.searchValue = match[1].trim();
             }
           }
@@ -510,7 +505,7 @@ const evaluateMessage = async (wxChatUser, msg) => {
       break;
       
     default:
-      console.log("The topic is unknown by default case");
+      debugLog("The topic is unknown, returned unknown subject message");
       // Add your logic for unknown topics here
       break;
   }  // end of switch statement
@@ -521,6 +516,7 @@ const evaluateMessage = async (wxChatUser, msg) => {
 
 
 const handleLocationUpdate = async (chat, wxUsers, wxUserId, wxChatUser, qualified_msg) => {
+  logFunctionName();
 
     // Handle location updates - updates to wxUsers should be made here, not in the framework
     if (qualified_msg.msg_subject === 'location' && 
@@ -546,7 +542,6 @@ const handleLocationUpdate = async (chat, wxUsers, wxUserId, wxChatUser, qualifi
           //wxUsers = await userManagement.updateUserLocation(wxUsers, wxUserId, locationLabel, locationType, locationValue);
           //wedebug- wxChatUser = wxUsers[wxUserId];
           await userManagement.updateUserLocation(wxUsers, wxUserId, wxChatUser, locationLabel, locationType, locationValue);
-          //console.log("wxChatUser: " + JSON.stringify(wxChatUser, null, 3));
           const currentLocationInfo = `Your current location is set to: Label=${wxChatUser.location.label} (Location=${wxChatUser.location.value})`;
           await sendMessage(chat, wxChatUser, currentLocationInfo);
         }  //end of if paramType is loc-label
@@ -558,13 +553,9 @@ const handleLocationUpdate = async (chat, wxUsers, wxUserId, wxChatUser, qualifi
 
             // Update user's location information
           await userManagement.updateUserLocation(wxUsers, wxUserId, wxChatUser, locationLabel, locationType, locationValue);
-          //wedebug- wxUsers = await userManagement.updateUserLocation(wxUsers, wxUserId, wxChatUser, locationLabel, locationType, locationValue);
-          //wedebug- wxChatUser = wxUsers[wxUserId];
-          //console.log("wxChatUser: " + JSON.stringify(wxChatUser, null, 3));
-
           // creates needed provider specific geo data format from user's common reference
           let newGeoData = await wxBotProviderMap.activeProvider.updateProvGeoData(wxChatUser);
-          console.log("newGeoData: " + JSON.stringify(newGeoData, null, 3));
+          debugLog("newGeoData: " + JSON.stringify(newGeoData, null, 3));
 
           // Confirm the location update to the user
           const currentLocationInfo = `Your current location is set to: Label=${locationLabel} (Location=${locationValue})`;
@@ -575,7 +566,7 @@ const handleLocationUpdate = async (chat, wxUsers, wxUserId, wxChatUser, qualifi
 
           // get the polygon URL
           let polyURL = await wxBotProviderMap.activeProvider.getProvPolyMapURL (wxChatUser);
-          console.log("polyURL: " + JSON.stringify(polyURL, null, 3));
+          debugLog("polyURL: " + JSON.stringify(polyURL, null, 3));
           
     
           // update the geoData with the polyURL
@@ -584,7 +575,7 @@ const handleLocationUpdate = async (chat, wxUsers, wxUserId, wxChatUser, qualifi
         } //end of else paramType is not loc-label
         
         // things were updated, log the wxChatUser
-        console.log("wxChatUser: " + JSON.stringify(wxChatUser, null, 3));
+        debugLog("wxChatUser: " + JSON.stringify(wxChatUser, null, 3));
       } else if (wxChatUser.locationValue) {
         // If no valid parameter but a location is set, send current location info
         const currentLocationInfo = `Your current location is set to: Label=${wxChatUser.location.label} (Location=${wxChatUser.location.value})`;
@@ -597,16 +588,15 @@ const handleLocationUpdate = async (chat, wxUsers, wxUserId, wxChatUser, qualifi
      return;
    } else if (qualified_msg.msg_subject === 'location' && qualified_msg.isValid && qualified_msg.msg_criteria == "unknown") 
       {
-        //wedebug- wxChatUser = wxUsers[wxUserId];
         if (wxChatUser.location) { 
-          console.log("wxChatUser.location: " + JSON.stringify(wxChatUser.location, null, 3));
+          debugLog("wxChatUser.location: " + JSON.stringify(wxChatUser.location, null, 3));
           // If no valid parameter but a location is set, send current location info
         const currentLocationInfo = `Your current location is set to: Label=${wxChatUser.location.label} (Location=${wxChatUser.location.value})`;
         await sendMessage(chat, wxChatUser, currentLocationInfo);
         return;
       } 
       else {
-        console.log("No location is set...");
+        debugLog("No location is set...");
         const currentLocationInfo = "No location is set...\n"+HELP_LOCATION_MSG
         await sendMessage(chat, wxChatUser, currentLocationInfo);
         return;
@@ -628,7 +618,7 @@ const handleLocationUpdate = async (chat, wxUsers, wxUserId, wxChatUser, qualifi
 
 const processUserRequest = async (wxData, qualMsg) => {
   logFunctionName();
-  console.log("wxData= " + JSON.stringify(wxData, null, 3) + " qualMsg= " + JSON.stringify(qualMsg, null, 3));
+  debugLog("wxData= " + JSON.stringify(wxData, null, 3) + " qualMsg= " + JSON.stringify(qualMsg, null, 3));
   let formattedData = [];
 
   switch (qualMsg.msg_subject.toLowerCase()) {
@@ -660,7 +650,6 @@ const processUserRequest = async (wxData, qualMsg) => {
 
 const formatRainData = async (wxData, qualMsg) => {
   logFunctionName();
-  //console.log("wxData= " + JSON.stringify(wxData, null, 3) + " qualMsg= " + JSON.stringify(qualMsg, null, 3));
   let formattedData = [];
 
   // Extract the comparison operator and value from qualifiedParameter
@@ -699,7 +688,6 @@ const formatRainData = async (wxData, qualMsg) => {
 
 const formatWindData = async (wxData, qualMsg) => {
   logFunctionName();
-  //console.log("wxData= " + JSON.stringify(wxData, null, 3) + " qualMsg= " + JSON.stringify(qualMsg, null, 3));
   let formattedData = [];
 
   // Extract the comparison operator and value from qualifiedParameter
@@ -758,7 +746,6 @@ const formatWindData = async (wxData, qualMsg) => {
 
 const formatTempData = async (wxData, qualMsg) => {
   logFunctionName();
-  //console.log("wxData= " + JSON.stringify(wxData, null, 3) + " qualMsg= " + JSON.stringify(qualMsg, null, 3));
   let formattedData = [];
 
   // Extract the comparison operator and value from qualifiedParameter
@@ -835,7 +822,6 @@ const formatBadWeatherData = async (wxData, qualMsg) => {
 
 const formatWeatherAlerts = async (wxaData, qualMsg) => {
   logFunctionName();
-  //console.log("wxaData= " + JSON.stringify(wxaData, null, 3) + " qualMsg= " + JSON.stringify(qualMsg, null, 3));
   let formattedData = [];
 
   // Iterate over each alert in wxaData
@@ -859,7 +845,6 @@ const formatWeatherAlerts = async (wxaData, qualMsg) => {
 
 const formatSearchData = async (wxData, qualMsg) => {
   logFunctionName();
-  //console.log("wxData= " + JSON.stringify(wxData, null, 3) + " qualMsg= " + JSON.stringify(qualMsg, null, 3));
   let formattedData = [];
 
   // Parse the qualifiedParameter as a JSON object
@@ -879,7 +864,7 @@ const formatSearchData = async (wxData, qualMsg) => {
   }
 
   // Now you can use params safely
-  console.log("Parsed params:", params);
+  debugLog("Parsed params:", params);
 
   switch (params.action) {
     case 'nDays':
@@ -933,7 +918,7 @@ const formatSearchData = async (wxData, qualMsg) => {
   if (formattedData.length === 0) {
     formattedData.push("No matching forecast periods found.");
   }
-  //console.log("switch case- formattedData= " + JSON.stringify(formattedData, null, 3)  );
+
   return formattedData;
 };
 
@@ -941,13 +926,13 @@ const formatSearchData = async (wxData, qualMsg) => {
 
 // Helper function to format a single period
 const formatPeriod = async (period) => {
-  //console.log("formatPeriod= " + JSON.stringify(period, null, 3) );
   return await cleanupString(`${chatTeal(period.refDayName)}: ${period.wxfDescr}`);
 };
 
 
 
 const handleNumOfDaysCriteria = async (wxData, numOfDays) => {
+  logFunctionName();
   const startIndex = 0;
   let endIndex = Math.min(startIndex + numOfDays * 2, wxData.wxfPeriod.length);
 
@@ -968,6 +953,7 @@ const handleNumOfDaysCriteria = async (wxData, numOfDays) => {
 }
 
 const handleDayCriteria = async (wxData, dayValue) => {
+  logFunctionName();
   const filteredPeriods = wxData.wxfPeriod.filter(period => {
     if (dayValue.toLowerCase() === 'wknd') {
       return ['Saturday', 'Sunday'].includes(period.refDOW);
@@ -987,7 +973,6 @@ const handleDayCriteria = async (wxData, dayValue) => {
 
 const handleSearchCriteria = async (wxData, searchValue) => {
   logFunctionName();
-  //console.log("wxData= " + JSON.stringify(wxData, null, 3) + " searchValue= " + searchValue);
 
   const searchTerm = searchValue.toLowerCase();
   const filteredPeriods = wxData.wxfPeriod.filter(period => 
@@ -1005,7 +990,6 @@ const handleSearchCriteria = async (wxData, searchValue) => {
 
 
 const formatUnfilteredTempData = async (wxData) => {
-  //console.log("in formatUnfilteredTempData function....wxData= " + JSON.stringify(wxData, null, 3))
   let formattedData = [];
   let currentDay = null;
 
@@ -1049,13 +1033,12 @@ const formatUnfilteredTempData = async (wxData) => {
 
     }
   }
-  //console.log("in formatUnfilteredTempData function....formattedData= " + JSON.stringify(formattedData, null, 3))
 
   return formattedData;
 };
 
 const formatUnfilteredForecastData = async (wxData) => {
-    //console.log("in formatUnfilteredForecastData function....wxData= " + JSON.stringify(wxData, null, 3))
+  logFunctionName();
 
   let formattedData = [];
 
@@ -1074,6 +1057,7 @@ const formatUnfilteredForecastData = async (wxData) => {
 
 
 const handleWeatherAlerts = async (chat,wxChatUser, qualified_msg) => {
+  logFunctionName();
         // Handle weather alerts requests
         if (qualified_msg.msg_subject.toLowerCase() === 'wxalerts' && qualified_msg.isValid) {
           const wxaUserData = await wxBotProviderMap.activeProvider.getwxAlertsData(wxChatUser);
@@ -1082,17 +1066,15 @@ const handleWeatherAlerts = async (chat,wxChatUser, qualified_msg) => {
             let formattedResponse = [];
 
             // Default formatting for alerts
-            console.log("Default formatting for alerts")
+            debugLog("Default formatting for alerts")
             formattedResponse = await processUserRequest(wxaUserData.wxaData, qualified_msg);
         
       
-            //console.log("formattedResponse: " + JSON.stringify(formattedResponse, null, 3));
             preMsg = "Weather for " + chatTeal(wxChatUser.location.label) + ((wxChatUser.location.label !== wxChatUser.location.value) ? 
               "(" + wxChatUser.location.value + ")" : "") ;
 
             await sendChats(chat, wxChatUser, formattedResponse, cleanupString(preMsg));
             
-            //console.log("wxaUserData.wxaData: " + JSON.stringify(wxaUserData.wxaData, null, 3));
             // provider returned invalid dataset for some reason
           } else {
             preMsg = `Your current location is set to: Label=${wxChatUser.location.label} (Location=${wxChatUser.location.value})`;
@@ -1106,6 +1088,7 @@ const handleWeatherAlerts = async (chat,wxChatUser, qualified_msg) => {
 
 
 const handleWeatherForecast = async (chat,wxChatUser, qualified_msg) => {
+  logFunctionName();
         // Handle weather forecast requests
         if (['temp', 'rain', 'wind', 'badweather', 'wxforecasts'].includes(qualified_msg.msg_subject.toLowerCase()) && qualified_msg.isValid) {
           const userLocation = wxChatUser.location;
@@ -1134,20 +1117,18 @@ const handleWeatherForecast = async (chat,wxChatUser, qualified_msg) => {
                 }
                 } else {
                   // Default formatting for other subjects or when qualifiedParameter is not empty
-                  console.log("Default formatting for other subjects or when qualifiedParameter is not empty")
+                  debugLog("Default formatting for other subjects or when qualifiedParameter is not empty")
                   formattedResponse = await processUserRequest(wxfUserData.wxfData, qualified_msg);
                   //formattedResponse = formatWeatherData(wxfUserData.wxfData, qualified_msg.msg_subject.toLowerCase());
                   }
       
-                //console.log("formattedResponse: " + JSON.stringify(formattedResponse, null, 3));
                 preMsg = "Weather for " + chatTeal(wxChatUser.location.label) + ((wxChatUser.location.label !== wxChatUser.location.value) ? 
                   "(" + wxChatUser.location.value + ")" : "") ;
 
                 await sendChats(chat, wxChatUser, formattedResponse, cleanupString(preMsg));
 
-                if (IS_DEBUG) {
-                  console.log("wxfUserData.wxfData: " + JSON.stringify(wxfUserData.wxfData, null, 3));
-                }
+                debugLog("wxfUserData.wxfData: " + JSON.stringify(wxfUserData.wxfData, null, 3));
+                
               
             // provider returned invalid dataset for some reason
           } else {
@@ -1172,7 +1153,7 @@ const handleWeatherForecast = async (chat,wxChatUser, qualified_msg) => {
 
 
 const handleHelpRequest = async (chat, wxChatUser, qualified_msg) => {
-  console.log("in handleHelpRequest function....qualified_msg= " + JSON.stringify(qualified_msg, null, 3));
+  debugLog("in handleHelpRequest function....qualified_msg= " + JSON.stringify(qualified_msg, null, 3));
     // Handle help requests
     if (qualified_msg.msg_subject === 'help' && qualified_msg.isValid) {
       if (qualified_msg.msg_criteria === 'examples') {
@@ -1192,6 +1173,7 @@ const handleHelpRequest = async (chat, wxChatUser, qualified_msg) => {
 
 
 async function adminListUsers(chat, wxUsers, wxChatUser, qualified_msg) {
+  logFunctionName();
   let userList = [];
 
   for (const userId in wxUsers) {
@@ -1252,9 +1234,10 @@ async function adminListUsers(chat, wxUsers, wxChatUser, qualified_msg) {
 
 
   async function handleHostFunction(chat, wxUsers, wxChatUser, qualified_msg) {
+    logFunctionName();
     const { action, secLevel, ...params } = qualified_msg.qualifiedParameter;
     const lowerCaseAction = action.toLowerCase();
-    console.log("in handleHostFunction function at beginning....lowerCaseAction= " + JSON.stringify(qualified_msg, null, 3));
+    debugLog("in handleHostFunction function at beginning....lowerCaseAction= " + JSON.stringify(qualified_msg, null, 3));
 
     // Security check
     let hasPermission = false;
@@ -1265,13 +1248,13 @@ async function adminListUsers(chat, wxUsers, wxChatUser, qualified_msg) {
     }
 
     if (!hasPermission) {
-      console.log("in handleHostFunction function....hasPermission= " + hasPermission);
-      console.log("in handleHostFunction function....wxChatUser.chattyType= " + wxChatUser.chattyType);
+      debugLog("in handleHostFunction function....hasPermission= " + hasPermission);
+      debugLog("in handleHostFunction function....wxChatUser.chattyType= " + wxChatUser.chattyType);
       await sendMessage(chat, wxChatUser, "You don't have permission to perform this action.");
       return;
     }
 
-    console.log(`User is a ${wxChatUser.chattyType}, processing ${secLevel} function: ${lowerCaseAction}`);
+    debugLog(`User is a ${wxChatUser.chattyType}, processing ${secLevel} function: ${lowerCaseAction}`);
 
 
     switch (lowerCaseAction) {
@@ -1283,17 +1266,17 @@ async function adminListUsers(chat, wxUsers, wxChatUser, qualified_msg) {
         break;
       case 'userstatus':
         // Implement enable user logic
-        console.log("in handleHostFunction case userstatus");
+        debugLog("in handleHostFunction case userstatus");
         await adminUserStatus(chat, wxUsers, wxChatUser, qualified_msg);
         break;
       case 'changegroup':
         // Implement disable user logic
-        console.log("in handleHostFunction case changegroup");
+        debugLog("in handleHostFunction case changegroup");
         await hostChangeGroup(chat, wxUsers, wxChatUser, qualified_msg);
         break;
       case 'listusers':
         // Implement list users logic
-        console.log("in handleHostFunction case listusers");
+        debugLog("in handleHostFunction case listusers");
         await adminListUsers(chat, wxUsers, wxChatUser, qualified_msg);
         break;
       case 'updatevariable':
@@ -1310,15 +1293,16 @@ async function adminListUsers(chat, wxUsers, wxChatUser, qualified_msg) {
   }
 
 const adminUserStatus = async (chat, wxUsers, wxChatUser, qualified_msg) => {
+  logFunctionName();
   const { action, secLevel, ...params } = qualified_msg.qualifiedParameter;
   const lowerCaseAction = action.toLowerCase();
-  console.log("in adminUserStatus function....lowerCaseAction= " + lowerCaseAction);
+  debugLog("in adminUserStatus function....lowerCaseAction= " + lowerCaseAction);
   if (lowerCaseAction === 'userstatus') {
     if (params.status === 'enable') {
-      console.log("in adminUserStatus function....params.status= " + params.status);
+      debugLog("in adminUserStatus function....params.status= " + params.status);
       await userManagement.enableUser(wxUsers, params.userID);
     } else if (params.status === 'disable') {
-      console.log("in adminUserStatus function....params.status= " + params.status);
+      debugLog("in adminUserStatus function....params.status= " + params.status);
       await userManagement.disableUser(wxUsers, params.userID, params.reason);
     }
   }
@@ -1330,9 +1314,10 @@ const adminUserStatus = async (chat, wxUsers, wxChatUser, qualified_msg) => {
 
 
 const hostChangeGroup = async (chat, wxUsers, wxChatUser, qualified_msg) => {
+  logFunctionName();
   const { action, secLevel, ...params } = qualified_msg.qualifiedParameter;
   const lowerCaseAction = action.toLowerCase();
-  console.log("in hostChangeGroup function....lowerCaseAction= " + lowerCaseAction);
+  debugLog("in hostChangeGroup function....lowerCaseAction= " + lowerCaseAction);
   await userManagement.setUserGroup (wxUsers, params.userID, params.group);
 
 
@@ -1359,8 +1344,8 @@ const sendMessage = async (chat, wxChatUser, message, preMsg = null) => {
 
 
 const sendChats = async (chat, wxChatUser, arr, preMsg = null) => {
-  console.log("in sendChats function....");
-  console.log("arr length= " + arr.length);
+  debugLog("in sendChats function....");
+  debugLog("arr length= " + arr.length);
 
   if (preMsg) {
     await chat.apiSendTextMessage(
@@ -1398,6 +1383,7 @@ module.exports = {
   chatTeal,
   chatBlue,
   chatYellow,
+  debugLog,
   processUserRequest,
   formatRainData,
   formatWindData,
