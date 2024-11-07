@@ -138,13 +138,13 @@ The script supports two configuration methods:
 
 1. **Custom Configuration**: 
    - Within the `config` folder in the application directory
-   - Copy `.env-template` from weatherBot folderto `config/my.env`
-   - Edit `my.env` with your desired settings
-   - Be sure to add your SimpleX address as the Host/Admin user (in quotes)
-   - The script will copy `config/my.env` to `weatherBot.env`
+   - Copy `wx-bot-config.yaml` from weatherBot folderto `wx-bot-config/config.yaml`
+   - Edit `config.yaml` with your desired settings
+   - Be sure to add your SimpleX user address as the Host/Admin user to the `init-host-user` field
+   - You don't have to do any customization, the app will use default values.
 
 2. **Default Configuration**:
-   - If no custom configuration exists, the script will copy `.env-template` to `weatherBot.env`
+   - If no custom configuration exists, the script will copy `wx-bot-config.yaml` to  `wx-bot-config/config.yaml`
 
     Example configuration:
 ```
@@ -154,15 +154,15 @@ CHAT_PORT=5225                 # Default SimpleX chat port
 ```
 
 The script will automatically:
-- Use your custom configuration if `config/my.env` exists
-- Fall back to `.env-template` if no custom configuration is found
+- Use your custom configuration if `wx-bot-config/config.yaml` exists
+- Fall back to `wx-bot-config.yaml` if no custom configuration is found
 - Launch both the SimpleX chat server and the weatherBot application
 
 
 
 
 ### 6. Connect to `weatherBot` via SimpleX Chat client using the address of the `wxBot` profile
-> **Note:** After starting the `weatherBot`, you can find the chatbot's address in the terminal output.  Copy the address and paste it into the SimpleX Chat client for a new chat connection.  The `weatherBot` will auto accept the connection and you are ready to chat!
+> **Note:** After starting the `weatherBot`, you can find the chatbot's address in the terminal output.  Copy the address and paste it into the SimpleX Chat client for a new chat connection.  The `weatherBot` will auto accept the connection and you are ready to chat!  Additionally, the chatbot's address will be displayed in the `wx-bot-config/stats.yaml` file under the `wxbot-address`, 'value' field.
 
 
 
