@@ -18,15 +18,14 @@
     "?"
   ],
   "specificCriteria": [
-    {"label": "freezing temps","regex": "\\b(?:freeze|freezing)\\b", "parameter": "hilo<32"},
+    {"label": "freezing temps", "regex": "\\b(?:freeze|freezing)\\b", "parameter": "hilo<32"},
     {"label": "bitter cold", "regex": "\\b(?:bitter)\\b", "parameter": "hilo<20"},
     {"label": "cooler temps", "regex": "\\b(?:cooler|cool|chilly|chill)\\b", "parameter": "hi<60"},
     {"label": "warm days", "regex": "\\b(?:warm)\\b", "parameter": "hi>70"},
     {"label": "Any temp less than", "regex": "\\?\\<(\\d+)", "parameter": "hilo<"},
     {"label": "Hi temp greater than", "regex": "\\?\\>(\\d+)", "parameter": "hi>"},
     {"label": "hotter days", "regex": "\\b(?:hotter|hot)\\b", "parameter": "hi>85"},
-    {"label": "Hi temp greater than","regex": "temp\\s*(?:>|over|above|greater\\s+than)\\s*(\\d+)", "parameter": "hilo>"},
+    {"label": "Hi temp greater than", "regex": "temp\\s*(?:>|over|above|greater\\s+than)\\s*(\\d+)", "parameter": "hilo>"},
     {"label": "Any temps less than", "regex": "temp\\s*(?:<|under|below|less\\s+than)\\s*(\\d+)", "parameter": "hilo<"}
   ]
 }
-

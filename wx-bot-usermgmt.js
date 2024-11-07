@@ -13,38 +13,34 @@ weatherBot chat client - version 1.0 - Uses SimpleX Chat frameworkto provide wea
     GNU Affero General Public License for more details.
 */
 
-const { ChatInfoType } = require("simplex-chat/dist/response");
-const {ChatType} = require("simplex-chat/dist/command")  
+const {ChatInfoType} = require("simplex-chat/dist/response")
+const {ChatType} = require("simplex-chat/dist/command")
 
-let wxUsers = {};
+let wxUsers = {}
 
 const updateWxUsers = async (wxUsers, chatInfo, forceHost = false) => {
+  let userId = chatInfo.type === ChatInfoType.Direct ? chatInfo.contact?.contactId : chatInfo.groupInfo?.groupId ?? ""
 
-  let userId = (chatInfo.type === ChatInfoType.Direct) 
-    ? chatInfo.contact?.contactId 
-    : chatInfo.groupInfo?.groupId ?? '';
+  let chatTypeAsDec = chatInfo.type == ChatInfoType.Direct ? 0.1 : 0.2
 
-
-  let chatTypeAsDec = chatInfo.type == ChatInfoType.Direct ? 0.1 : 0.2;
-
-  let wxUserId = userId + chatTypeAsDec;
+  let wxUserId = userId + chatTypeAsDec
 
   if (!wxUsers[wxUserId]) {
-    let displayName = '';
-    let fullName = '';
-    let chatType = chatInfo.type == ChatInfoType.Direct ? ChatType.Direct : ChatType.Group;
+    let displayName = ""
+    let fullName = ""
+    let chatType = chatInfo.type == ChatInfoType.Direct ? ChatType.Direct : ChatType.Group
 
     if (chatInfo.type == ChatInfoType.Direct) {
-      displayName = chatInfo.contact?.profile?.displayName || '';
-      fullName = chatInfo.contact?.profile?.fullName || '';
+      displayName = chatInfo.contact?.profile?.displayName || ""
+      fullName = chatInfo.contact?.profile?.fullName || ""
     } else if (chatInfo.type == ChatInfoType.Group) {
-      displayName = chatInfo.groupInfo?.groupProfile?.displayName || '';
-      fullName = chatInfo.groupInfo?.groupProfile?.fullName || '';
+      displayName = chatInfo.groupInfo?.groupProfile?.displayName || ""
+      fullName = chatInfo.groupInfo?.groupProfile?.fullName || ""
     }
 
     wxUsers[wxUserId] = {
       wxUserId: wxUserId,
-      chattyType: forceHost || Object.keys(wxUsers).length === 0 ? 'host' : 'user',
+      chattyType: forceHost || Object.keys(wxUsers).length === 0 ? "host" : "user",
       chatType: chatInfo.type,
       displayName,
       fullName,
@@ -54,90 +50,84 @@ const updateWxUsers = async (wxUsers, chatInfo, forceHost = false) => {
         ID: userId,
       },
       isDisabled: false,
-      disabledReason: '',
-    };
+      disabledReason: "",
+    }
   }
 
-  return;
-};
+  return
+}
 
 const getUserById = (chatInfo) => {
-  const userId = (chatInfo.type === ChatInfoType.Direct)  ? chatInfo.contact?.contactId : chatInfo.groupInfo?.groupId ?? '';
+  const userId = chatInfo.type === ChatInfoType.Direct ? chatInfo.contact?.contactId : chatInfo.groupInfo?.groupId ?? ""
 
-  const chatTypeAsDec = chatInfo.type == ChatInfoType.Direct ? 0.1 : 0.2;
-  const wxUserId = userId + chatTypeAsDec;
-  
+  const chatTypeAsDec = chatInfo.type == ChatInfoType.Direct ? 0.1 : 0.2
+  const wxUserId = userId + chatTypeAsDec
 
-
-  return wxUserId;
-};
+  return wxUserId
+}
 
 const setUserGroup = async (wxUsers, wxUserId, group) => {
-  console.log("setUserGroup:" + wxUserId + " group:" + group);
-  if (wxUsers[wxUserId] && ['host', 'admin', 'user'].includes(group)) {
-    wxUsers[wxUserId].chattyType = group;
-    return true;
+  console.log("setUserGroup:" + wxUserId + " group:" + group)
+  if (wxUsers[wxUserId] && ["host", "admin", "user"].includes(group)) {
+    wxUsers[wxUserId].chattyType = group
+    return true
+  } else {
+    console.log("setUserGroup:" + wxUserId + " group:" + group + " not found")
   }
-  else {
-    console.log("setUserGroup:" + wxUserId + " group:" + group + " not found");
-  }
-  return false;
-};
+  return false
+}
 
 const disableUser = async (wxUsers, wxUserId, reason) => {
-  console.log("disableUser:" + wxUserId + " reason:" + reason);
+  console.log("disableUser:" + wxUserId + " reason:" + reason)
   if (wxUsers[wxUserId]) {
-    wxUsers[wxUserId].isDisabled = true;
-    wxUsers[wxUserId].disabledReason = reason;
-    return true;
+    wxUsers[wxUserId].isDisabled = true
+    wxUsers[wxUserId].disabledReason = reason
+    return true
+  } else {
+    console.log("disableUser:" + wxUserId + " not found")
   }
-  else {
-    console.log("disableUser:" + wxUserId + " not found");
-  } 
-  return false;
-};
+  return false
+}
 
 const enableUser = async (wxUsers, wxUserId) => {
   if (wxUsers[wxUserId]) {
-    wxUsers[wxUserId].isDisabled = false;
-    wxUsers[wxUserId].disabledReason = '';
-    return true;
+    wxUsers[wxUserId].isDisabled = false
+    wxUsers[wxUserId].disabledReason = ""
+    return true
   }
-  return false;
-};
+  return false
+}
 
 const deleteUser = (wxUserId) => {
   if (wxUsers[wxUserId]) {
-    delete wxUsers[wxUserId];
-    return true;
+    delete wxUsers[wxUserId]
+    return true
   }
-  return false;
-};
+  return false
+}
 
 const listDisabledUsers = () => {
-  return Object.values(wxUserId).filter(user => user.isDisabled);
-};
+  return Object.values(wxUserId).filter((user) => user.isDisabled)
+}
 
 const listAdminUsers = () => {
-  return Object.values(wxUserId).filter(user => user.chattyType === 'admin');
-};
+  return Object.values(wxUserId).filter((user) => user.chattyType === "admin")
+}
 
-const updateUserLocation = async (wxUsers, wxUserId, wxChatUser, locationLabel,locationType, locationValue) => {
+const updateUserLocation = async (wxUsers, wxUserId, wxChatUser, locationLabel, locationType, locationValue) => {
   if (!wxUsers[wxUserId]) {
-    wxUsers[wxUserId] = {};
+    wxUsers[wxUserId] = {}
   }
-  wxUsers[wxUserId].location = { label: locationLabel,type: locationType, value: locationValue };
-  wxChatUser = wxUsers[wxUserId];
+  wxUsers[wxUserId].location = {label: locationLabel, type: locationType, value: locationValue}
+  wxChatUser = wxUsers[wxUserId]
 
   //return wxUsers;
-  return;
-};
-
-
+  return
+}
 
 const getUserLocation = (wxUsers, wxUserId) => {
-  return wxUsers[wxUserId] && wxUsers[wxUserId].location;
-};
+  return wxUsers[wxUserId] && wxUsers[wxUserId].location
+}
 
 module.exports = {
   updateWxUsers,
@@ -150,4 +140,4 @@ module.exports = {
   listAdminUsers,
   updateUserLocation,
   getUserLocation,
-};
+}

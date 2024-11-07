@@ -1,16 +1,5 @@
 {
-  "generalWords": [
-    "location",
-    "zipcode",
-    "zip",
-    "city",
-    "town",
-    "gps",
-    "latitude",
-    "longitude",
-    "coordinates",
-    "position" 
-  ],
+  "generalWords": ["location", "zipcode", "zip", "city", "town", "gps", "latitude", "longitude", "coordinates", "position"],
   "specificCriteria": [
     {
       "label": "setting location (city, state)",

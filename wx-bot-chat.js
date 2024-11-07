@@ -33,218 +33,202 @@ weatherBot chat client - version 1.0 - Uses SimpleX Chat frameworkto provide wea
 
 //=====================================
 
-console.log("wx-bot-chat.js initializing...");
-console.log(process.cwd());
+console.log("wx-bot-chat.js initializing...")
+console.log(process.cwd())
 
 const {ChatClient} = require("simplex-chat")
-const {ChatType} = require("simplex-chat/dist/command")  
+const {ChatType} = require("simplex-chat/dist/command")
 const {ciContentText, ChatInfoType} = require("simplex-chat/dist/response")
 
 const wxBotFramework = require("./wx-bot-framework")
 const userManagement = require("./wx-bot-usermgmt")
 const cfg = require("./wx-bot-config")
-const path = require('path');
+const path = require("path")
 
-let wxUsers = {};
-
+let wxUsers = {}
 
 async function run() {
-
   // Initialize when module loads
-  await cfg.initializeConfigs();
-  const assignedHostUser = cfg.appConfig.initHostUser !== ''; // true if initHostUser has a value
+  await cfg.initializeConfigs()
+  const assignedHostUser = cfg.appConfig.initHostUser !== "" // true if initHostUser has a value
 
-  const chat = await ChatClient.create(`ws://localhost:${cfg.appConfig.simplexChatPort}`);
-  const user = await chat.apiGetActiveUser();
-  
+  const chat = await ChatClient.create(`ws://localhost:${cfg.appConfig.simplexChatPort}`)
+  const user = await chat.apiGetActiveUser()
+
   if (!user) {
-    console.log("SimpleX Chat: No user profile");
-    return;
+    console.log("SimpleX Chat: No user profile")
+    return
   }
-  
-  console.log(`SimpleX Chat: Bot profile: ${user.profile.displayName} (${user.profile.fullName})`);
-  
-  const address = (await chat.apiGetUserAddress()) || (await chat.apiCreateUserAddress());
-  wxBotFramework.debugLog(`apiGetUserAddress (or apiCreateUserAddress): Bot address: ${address}`);
-  
-    
-  await cfg.updateStatsValue(path.join(cfg.appConfig.paths.userHome, cfg.appConfig.paths.yamlPath, 'stats.yaml'), 'wxbot-address', address);
-  console.log(`Updated stats.yaml file with address: "${address}"`);
-  
-  
-  await chat.enableAddressAutoAccept();
+
+  console.log(`SimpleX Chat: Bot profile: ${user.profile.displayName} (${user.profile.fullName})`)
+
+  const address = (await chat.apiGetUserAddress()) || (await chat.apiCreateUserAddress())
+  wxBotFramework.debugLog(`apiGetUserAddress (or apiCreateUserAddress): Bot address: ${address}`)
+
+  await cfg.updateStatsValue(path.join(cfg.appConfig.paths.yamlPath, "stats.yaml"), "wxbot-address", address)
+  console.log(`Updated stats.yaml file with address: "${address}"`)
+
+  await chat.enableAddressAutoAccept()
 
   if (wxBotFramework.shareBotAddress) {
     try {
-      await chat.sendChatCmdStr(`/_profile_address ${user.userId} on`);
+      await chat.sendChatCmdStr(`/_profile_address ${user.userId} on`)
     } catch (error) {
-      console.error("Error sharing bot address:", error);
+      console.error("Error sharing bot address:", error)
     }
   }
 
-  if (assignedHostUser && cfg.appConfig.initHostUser !== '') {
+  if (assignedHostUser && cfg.appConfig.initHostUser !== "") {
     try {
-      let resp = await chat.sendChatCmdStr(`/connect ${cfg.appConfig.initHostUser}`);
-      wxBotFramework.debugLog("Host user connection response:", JSON.stringify(resp, null, 3));
+      let resp = await chat.sendChatCmdStr(`/connect ${cfg.appConfig.initHostUser}`)
+      wxBotFramework.debugLog("Host user connection response:", JSON.stringify(resp, null, 3))
 
       if (resp.chatError) {
-        wxBotFramework.debugLog("Error connecting host user:", resp.chatError);
-        let existingUserId = null;
-        if (resp.chatError.errorType.connectionPlan.contactAddressPlan.type == 'known') {
-          existingUserId = resp.chatError.errorType.connectionPlan.contactAddressPlan.contact.contactId + '.1';
+        wxBotFramework.debugLog("Error connecting host user:", resp.chatError)
+        let existingUserId = null
+        if (resp.chatError.errorType.connectionPlan.contactAddressPlan.type == "known") {
+          existingUserId = resp.chatError.errorType.connectionPlan.contactAddressPlan.contact.contactId + ".1"
         } else if (resp.chatError.errorType.connectionPlan.contactAddressPlan.groupId) {
-          existingUserId = resp.chatError.errorType.connectionPlan.contactAddressPlan.groupId + '.2';
+          existingUserId = resp.chatError.errorType.connectionPlan.contactAddressPlan.groupId + ".2"
         } else {
-          existingUserId = null; // or handle the case where neither is present
+          existingUserId = null // or handle the case where neither is present
         }
         // if existingUserId is in wxUsers, then we need to update and forceHost = true
         if (existingUserId && wxUsers[existingUserId]) {
           try {
-              wxUsers[existingUserId].chattyType = 'host';
+            wxUsers[existingUserId].chattyType = "host"
           } catch (error) {
-            wxBotFramework.debugLog("Error updating wxUsers to forceHost:", error);
+            wxBotFramework.debugLog("Error updating wxUsers to forceHost:", error)
           }
         }
-        console.log("Host User already connected as :", existingUserId);
+        console.log("Host User already connected as :", existingUserId)
       }
     } catch (error) {
-      let existingUserId = null;
-      if (error.chatError.errorType.connectionPlan.contactAddressPlan.type == 'known') {
-        existingUserId = error.chatError.errorType.connectionPlan.contactAddressPlan.contact.contactId + '.1';
+      let existingUserId = null
+      if (error.chatError.errorType.connectionPlan.contactAddressPlan.type == "known") {
+        existingUserId = error.chatError.errorType.connectionPlan.contactAddressPlan.contact.contactId + ".1"
       } else if (error.chatError.errorType.connectionPlan.contactAddressPlan.groupId) {
-        existingUserId = error.chatError.errorType.connectionPlan.contactAddressPlan.groupId + '.2';
+        existingUserId = error.chatError.errorType.connectionPlan.contactAddressPlan.groupId + ".2"
       } else {
-        existingUserId = null; // or handle the case where neither is present
+        existingUserId = null // or handle the case where neither is present
       }
       // if existingUserId is in wxUsers, then we need to update and forceHost = true
       if (existingUserId && wxUsers[existingUserId]) {
         try {
-            wxUsers[existingUserId].chattyType = 'host';
+          wxUsers[existingUserId].chattyType = "host"
         } catch (error) {
-          console.error("Error updating wxUsers to forceHost:", error);
+          console.error("Error updating wxUsers to forceHost:", error)
         }
       }
-      console.log("Host User already connected as :", existingUserId);
+      console.log("Host User already connected as :", existingUserId)
     }
   }
 
-
-  await processMessages(chat);
+  await processMessages(chat)
 }
 
 async function processMessages(chat) {
   for await (const r of chat.msgQ) {
-    const resp = r instanceof Promise ? await r : r;
-    
+    const resp = r instanceof Promise ? await r : r
+
     switch (resp.type) {
       case "contactConnected":
         try {
-          await handleNewContact(chat, resp.contact);
+          await handleNewContact(chat, resp.contact)
         } catch (error) {
-          console.error("Error processing new contact:", error);
-          console.error("Failed contact:", JSON.stringify(resp.contact, null, 2));
+          console.error("Error processing new contact:", error)
+          console.error("Failed contact:", JSON.stringify(resp.contact, null, 2))
         }
-        break;
+        break
       case "newChatItem":
       case "newChatItems":
-        const chatItems = resp.type === "newChatItem" ? [resp.chatItem] : resp.chatItems;
+        const chatItems = resp.type === "newChatItem" ? [resp.chatItem] : resp.chatItems
         for (const chatItem of chatItems) {
           try {
-            await handleNewMessage(chat, chatItem);
+            await handleNewMessage(chat, chatItem)
           } catch (error) {
-            console.error("Error processing message:", error);
-            console.error("Failed chatItem:", JSON.stringify(chatItem, null, 2));
-            if (chatItem.chatItem.content.type === 'sndMsgContent') {
-              console.error("Message content:", ciContentText(chatItem.chatItem.content));
+            console.error("Error processing message:", error)
+            console.error("Failed chatItem:", JSON.stringify(chatItem, null, 2))
+            if (chatItem.chatItem.content.type === "sndMsgContent") {
+              console.error("Message content:", ciContentText(chatItem.chatItem.content))
             }
           }
         }
-        break;
+        break
     }
   }
 }
 
-
-
 async function handleNewContact(chat, contact) {
-  console.log(`${contact.profile.displayName} (${contact.contactId}) connected`);
+  console.log(`${contact.profile.displayName} (${contact.contactId}) connected`)
 
-  await chat.apiSendTextMessage(ChatType.Direct, contact.contactId, wxBotFramework.WELCOME_MSG);
+  await chat.apiSendTextMessage(ChatType.Direct, contact.contactId, wxBotFramework.WELCOME_MSG)
 }
 
-
-
-
 async function handleNewMessage(chat, chatItem) {
-  const { chatInfo } = chatItem;
-  const msg = ciContentText(chatItem.chatItem.content);
-  
-  wxBotFramework.debugLog("new message, contact info: " + JSON.stringify(chatItem, null, 3));
-  
+  const {chatInfo} = chatItem
+  const msg = ciContentText(chatItem.chatItem.content)
 
+  wxBotFramework.debugLog("new message, contact info: " + JSON.stringify(chatItem, null, 3))
 
-  await userManagement.updateWxUsers(wxUsers, chatInfo);
-  let wxUserId = await userManagement.getUserById(chatInfo);
-  let wxChatUser = wxUsers[wxUserId];
-  wxBotFramework.debugLog("wxChatUser: " + JSON.stringify(wxChatUser, null, 3));
+  await userManagement.updateWxUsers(wxUsers, chatInfo)
+  let wxUserId = await userManagement.getUserById(chatInfo)
+  let wxChatUser = wxUsers[wxUserId]
+  wxBotFramework.debugLog("wxChatUser: " + JSON.stringify(wxChatUser, null, 3))
 
-    // evaluate the message
-    // if msg is undefined or null or empty string, skip evaluation
-    if (msg  == undefined || msg == null || msg == '') {
-      wxBotFramework.debugLog("empty message, skipping evaluation");
-      return;
-    }
-  
-    //check if the user is disabled
-    if (wxChatUser.isDisabled) {
-      console.log("user is disabled, skipping evaluation");
-      return;
-    }
+  // evaluate the message
+  // if msg is undefined or null or empty string, skip evaluation
+  if (msg == undefined || msg == null || msg == "") {
+    wxBotFramework.debugLog("empty message, skipping evaluation")
+    return
+  }
 
-    //evaluate the message
-    const qualified_msg = await wxBotFramework.evaluateMessage(wxChatUser, msg);
-    wxBotFramework.debugLog("Evaluated Msg: " + JSON.stringify(qualified_msg, null, 3));
+  //check if the user is disabled
+  if (wxChatUser.isDisabled) {
+    console.log("user is disabled, skipping evaluation")
+    return
+  }
 
-    if (cfg.appConfig.isDebug && (wxChatUser.chattyType === "host" || wxChatUser.chattyType === "admin")) {
-      await wxBotFramework.sendMessage(chat, wxChatUser, "Evaluated Msg: " + JSON.stringify(qualified_msg, null, 3));
-    } 
+  //evaluate the message
+  const qualified_msg = await wxBotFramework.evaluateMessage(wxChatUser, msg)
+  wxBotFramework.debugLog("Evaluated Msg: " + JSON.stringify(qualified_msg, null, 3))
 
-    switch (qualified_msg.msg_subject.toLowerCase()) {
-      case 'help':
-        await wxBotFramework.handleHelpRequest(chat, wxChatUser, qualified_msg);
-        break;  //end of help related activity
-  
-      case 'location':
-        await wxBotFramework.handleLocationUpdate(chat, wxUsers, wxUserId, wxChatUser, qualified_msg);
-        break;
-  
-      case 'wxalerts':  // Handle weather alerts requests
-        await wxBotFramework.handleWeatherAlerts(chat,wxChatUser, qualified_msg);
-        break;
-  
-      case 'temp':
-      case 'rain':
-      case 'wind':
-      case 'badweather':
-      case 'wxforecasts':
-        await wxBotFramework.handleWeatherForecast(chat, wxChatUser, qualified_msg);
-        break;  //end of weather forecast related activity
-  
-      case 'hostfunction':
-        if (wxChatUser.chattyType === "host" || wxChatUser.chattyType === "admin") {
-          await wxBotFramework.handleHostFunction(chat, wxUsers, wxChatUser, qualified_msg);
-        } else {
-          await wxBotFramework.sendMessage(chat, wxChatUser, "You don't have permission to perform this action.");
-        }
-        break;  //end of host function related activity
-  
-      default:
-        await wxBotFramework.sendMessage(chat, wxChatUser, "I'm sorry, I didn't understand that request.");
-    }  //end of switch
+  if (cfg.appConfig.isDebug && (wxChatUser.chattyType === "host" || wxChatUser.chattyType === "admin")) {
+    await wxBotFramework.sendMessage(chat, wxChatUser, "Evaluated Msg: " + JSON.stringify(qualified_msg, null, 3))
+  }
 
+  switch (qualified_msg.msg_subject.toLowerCase()) {
+    case "help":
+      await wxBotFramework.handleHelpRequest(chat, wxChatUser, qualified_msg)
+      break //end of help related activity
 
-}  //end of handleNewMessage
+    case "location":
+      await wxBotFramework.handleLocationUpdate(chat, wxUsers, wxUserId, wxChatUser, qualified_msg)
+      break
 
+    case "wxalerts": // Handle weather alerts requests
+      await wxBotFramework.handleWeatherAlerts(chat, wxChatUser, qualified_msg)
+      break
 
+    case "temp":
+    case "rain":
+    case "wind":
+    case "badweather":
+    case "wxforecasts":
+      await wxBotFramework.handleWeatherForecast(chat, wxChatUser, qualified_msg)
+      break //end of weather forecast related activity
 
-run().catch(console.error);
+    case "hostfunction":
+      if (wxChatUser.chattyType === "host" || wxChatUser.chattyType === "admin") {
+        await wxBotFramework.handleHostFunction(chat, wxUsers, wxChatUser, qualified_msg)
+      } else {
+        await wxBotFramework.sendMessage(chat, wxChatUser, "You don't have permission to perform this action.")
+      }
+      break //end of host function related activity
+
+    default:
+      await wxBotFramework.sendMessage(chat, wxChatUser, "I'm sorry, I didn't understand that request.")
+  } //end of switch
+} //end of handleNewMessage
+
+run().catch(console.error)

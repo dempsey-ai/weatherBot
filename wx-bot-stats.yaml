@@ -3,7 +3,7 @@ data:
   wxbot-address:
     name: wxBot Address
     type: string
-    value: 
+    value:
     description: The weatherBot SimpleX profile address to share with others in order to connect to weatherBot
     copyable: true
     masked: false
@@ -11,7 +11,7 @@ data:
   host-user-address:
     name: Host User Invited (set via config)
     type: string
-    value: 
+    value:
     description: A Simplex Chat profile address that weatherBot will use on Start to send a connection request.  This is intended to be the first connected user of weatherBot and thus the host/admin user for future release features.  This is currently an optional config value and has no effect on the operation of weatherBot.
     copyable: true
     masked: false

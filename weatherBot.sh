@@ -27,37 +27,28 @@ echo $HOME
 # use yq and get data.app-host.value
 # bash, docker, or start9
 APP_HOST=$(yq e '.data.app-host.value' "wx-bot-weatherbot.yaml")
-YAML_FLDR=$(yq e '.data.yamls-path.value' "wx-bot-weatherbot.yaml")
-DATA_FLDR=$(yq e '.data.data-path.value' "wx-bot-weatherbot.yaml")
+YAML_DATA=$(yq e '.data.yamls-path.value' "wx-bot-weatherbot.yaml")
+APP_DATA=$(yq e '.data.data-path.value' "wx-bot-weatherbot.yaml")
 USER_HOME=$(yq e '.data.user-home.value' "wx-bot-weatherbot.yaml")
+APP_HOME=$(yq e '.data.app-home.value' "wx-bot-weatherbot.yaml")
 
-if [ "$APP_HOST" == "bash" ]; then
-    printf "Not running in Docker, setting up nvm\n"
-    APP_HOME=.
-    CLI_HOME=$HOME/.local/bin
-    APP_DATA=./$DATA_FLDR
-    YAML_DATA=./$YAML_FLDR
-    # use or comment the following lines if you need to use nvm to set the node version for your specific environment install
-    source ~/.nvm/nvm.sh
-    nvm use 20.9.0  # Ensure the correct version is used
+if [ "$APP_HOST" == "start9" ]; then
+    printf "Running in Start9, relying on clean system\n"
+    HOME=$USER_HOME
+    CLI_HOME=$USER_HOME/cli
 elif [ "$APP_HOST" == "docker" ]; then
     # dockerfiles will update the existing weatherbot.yaml with custom values to use below
     printf "Running in Docker, relying on clean system\n"
     HOME=$USER_HOME
-    APP_HOME=$USER_HOME/weatherbot
     CLI_HOME=$USER_HOME/cli
-    APP_DATA=$DATA_FLDR
-    YAML_DATA=$YAML_FLDR
     printf "Node.js found at: $(which node)\n"
     #whereis node
-elif [ "$APP_HOST" == "start9" ]; then
-    printf "Running in Start9, relying on clean system\n"
-    HOME=$USER_HOME
-    APP_HOME=$USER_HOME/weatherbot
-    CLI_HOME=$USER_HOME/cli
-    APP_DATA=$DATA_FLDR
-    START9_HOME=$YAML_FLDR
-    YAML_DATA=$YAML_FLDR
+else 
+    printf "assuming bash environment, setting up nvm\n"
+    CLI_HOME=$HOME/.local/bin
+    # use or comment the following lines if you need to use nvm to set the node version for your specific environment install
+    source ~/.nvm/nvm.sh
+    nvm use 20.9.0  # Ensure the correct version is used
 fi
 
 
@@ -122,11 +113,11 @@ fi
     printf "\n"
     echo "--------------------------------"
     # Start the first application with piped input
-    if [ ! -f $DATA_FLDR/initcli.flag ]; then
+    if [ ! -f $APP_DATA/initcli.flag ]; then
         printf "initcli.flag NOT found, starting wxBot first time\n"
         echo "wxBot" | $CLI_HOME/simplex-chat -l error -p ${SIMPLEX_CHAT_PORT:-5225} -d $APP_DATA/jed &
         FIRST_APP_PID=$!
-        touch $DATA_FLDR/initcli.flag  # Create the flag file here
+        touch $APP_DATA/initcli.flag  # Create the flag file here
     else
         printf "Normal CLI start on port ${SIMPLEX_CHAT_PORT:-5225}\n"
         $CLI_HOME/simplex-chat -l error -p ${SIMPLEX_CHAT_PORT:-5225} -d $APP_DATA/jed &
@@ -145,17 +136,17 @@ fi
         # Wait a moment to see if it stays running
         sleep 10
         if kill -0 $SECOND_APP_PID 2>/dev/null; then
-            printf "wx-bot-chat.js started successfully"
+            printf "wx-bot-chat.js started successfully\n"
             break
         else
-            printf "wx-bot-chat.js failed to start, retrying..."
+            printf "wx-bot-chat.js failed to start, retrying...\n"
             RETRY_COUNT=$((RETRY_COUNT + 1))
             [ $RETRY_COUNT -lt $MAX_RETRIES ] && sleep 10
         fi
     done
 
     if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
-        echo "Failed to start wx-bot-chat.js after $MAX_RETRIES attempts"
+        printf "Failed to start wx-bot-chat.js after $MAX_RETRIES attempts\n"
         exit 1
     fi
 
@@ -171,13 +162,15 @@ fi
         sleep 2
     fi
    
-	if is_docker; then
-	    echo "Exiting wxBot"
-	    # echo "Restarting applications..."
-	else
-	    echo "non-docker, exiting wxBot"
+
+    if [ "$APP_HOST" == "docker" ]; then
+	    printf "Exiting weatherBot\n"
+    elif [ "$APP_HOST" == "start9" ]; then
+        printf "Exiting weatherBot\n"
+    else
+        printf "Exiting weatherBot\n"
         # comment out the following line if you don't want to pause the script before exiting/restarting
 	    read -p "Press [Enter] to continue..."
-	fi
+    fi
 #done
 

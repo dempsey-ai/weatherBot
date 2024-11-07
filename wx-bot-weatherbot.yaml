@@ -5,30 +5,23 @@ data:
     type: string
     value: bash
     description: Drives host environment logic.  Valid host values are bash, docker, or start9
-    copyable: true
-    masked: false
-    qr: false
-  user-home:
+  app-home:
     name: App Home Path
     type: string
     value: .
-    description: Path to the user's home folder.  app_host and dockerfileswill drive full path logic.
-    copyable: true
-    masked: false
-    qr: false
+    description: Path to the user's home folder.  app_host and dockerfile will drive full path logic.
+  user-home:
+    name: User Home Path
+    type: string
+    value: .
+    description: Path to the user's home folder.  app_host and dockerfile will drive full path logic.
   yamls-path:
     name: Yaml Files Path
     type: string
-    value: wx-bot-config
+    value: ./wx-bot-config
     description: Name of the yaml files folder.  app_host will drive full path logic.
-    copyable: true
-    masked: false
-    qr: false
   data-path:
     name: App Data Path
     type: string
-    value: wx-bot-appdata
+    value: ./wx-bot-appdata
     description: Name of the app data folder where SimpleX chat DB and other weatherBot persistent data is stored.  app_host will drive full path logic.
-    copyable: true
-    masked: false
-    qr: false
