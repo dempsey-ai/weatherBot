@@ -15,7 +15,7 @@ weatherBot chat client - version 1.2 - Uses SimpleX Chat framework to provide we
 COMMENT
 
 
-
+set -a
 
 if [ -f ~/.bashrc ]; then
     source ~/.bashrc
@@ -33,9 +33,15 @@ USER_HOME=$(yq e '.data.user-home.value' "wx-bot-weatherbot.yaml")
 APP_HOME=$(yq e '.data.app-home.value' "wx-bot-weatherbot.yaml")
 
 if [ "$APP_HOST" == "start9" ]; then
-    printf "Running in Start9, relying on clean system\n"
+    printf "Running in Start9...\n"
     HOME=$USER_HOME
     CLI_HOME=$USER_HOME/cli
+    START9_HOME="${START9_HOME:-/root/start9}"
+    if [ ! -d $START9_HOME ]; then
+        printf "start9 home directory not found, creating\n"
+        mkdir -p $START9_HOME
+    fi
+
 elif [ "$APP_HOST" == "docker" ]; then
     # dockerfiles will update the existing weatherbot.yaml with custom values to use below
     printf "Running in Docker, relying on clean system\n"
