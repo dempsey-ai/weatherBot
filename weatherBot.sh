@@ -22,49 +22,47 @@ if [ -f ~/.bashrc ]; then
 fi
 
 echo $SHELL
+echo $HOME
 
+# use yq and get data.app-host.value
+# bash, docker, or start9
+APP_HOST=$(yq e '.data.app-host.value' "wx-bot-weatherbot.yaml")
+YAML_FLDR=$(yq e '.data.yamls-path.value' "wx-bot-weatherbot.yaml")
+DATA_FLDR=$(yq e '.data.data-path.value' "wx-bot-weatherbot.yaml")
+USER_HOME=$(yq e '.data.user-home.value' "wx-bot-weatherbot.yaml")
 
-
-
-is_docker() {
-    # Multiple methods to detect Docker
-    if [ -f /.dockerenv ]; then
-        return 0  # True, running in Docker
-    elif grep -q 'docker\|lxc' /proc/1/cgroup 2>/dev/null; then
-        return 0  # True, running in Docker
-    elif grep -q 'docker\|lxc' /proc/self/cgroup 2>/dev/null; then
-        return 0  # True, running in Docker
-    elif [ -f /proc/1/environ ] && grep -q 'container=docker' /proc/1/environ 2>/dev/null; then
-        return 0  # True, running in Docker
-    fi
-    return 1  # False, not running in Docker
-}
-
-if is_docker; then
-    echo "Running in Docker, relying on clean system"
-        APP_HOME="${APP_HOME:-/home/appuser/weatherbot}"
-        CLI_HOME="${CLI_HOME:-/home/appuser/cli}"
-        APP_DATA="${APP_DATA:-$APP_HOME/wx-bot-appdata}"
-        VOL_DATA="${VOL_DATA:-$APP_HOME/config}"
-        which node || {
-        echo "Node.js not found"
-        exit 1
-    }
-    echo "Node.js found at: $(which node)"
-    #whereis node
-else
+if [ "$APP_HOST" == "bash" ]; then
+    printf "Not running in Docker, setting up nvm\n"
+    APP_HOME=.
+    CLI_HOME=$HOME/.local/bin
+    APP_DATA=./$DATA_FLDR
+    YAML_DATA=./$YAML_FLDR
     # use or comment the following lines if you need to use nvm to set the node version for your specific environment install
-    echo "Not running in Docker, setting up nvm"
-    APP_HOME="${APP_HOME:-.}"
-    CLI_HOME="${CLI_HOME:-$HOME/.local/bin}"
-    APP_DATA="${APP_DATA:-$APP_HOME/wx-bot-appdata}"
-    VOL_DATA="${VOL_DATA:-$APP_HOME/config}"
     source ~/.nvm/nvm.sh
     nvm use 20.9.0  # Ensure the correct version is used
+elif [ "$APP_HOST" == "docker" ]; then
+    # dockerfiles will update the existing weatherbot.yaml with custom values to use below
+    printf "Running in Docker, relying on clean system\n"
+    HOME=$USER_HOME
+    APP_HOME=$USER_HOME/weatherbot
+    CLI_HOME=$USER_HOME/cli
+    APP_DATA=$DATA_FLDR
+    YAML_DATA=$YAML_FLDR
+    printf "Node.js found at: $(which node)\n"
+    #whereis node
+elif [ "$APP_HOST" == "start9" ]; then
+    printf "Running in Start9, relying on clean system\n"
+    HOME=$USER_HOME
+    APP_HOME=$USER_HOME/weatherbot
+    CLI_HOME=$USER_HOME/cli
+    APP_DATA=$DATA_FLDR
+    START9_HOME=$YAML_FLDR
+    YAML_DATA=$YAML_FLDR
 fi
 
 
-echo Current OS user: $(whoami)
+
+printf "Current OS user: $(whoami)\n"
 # Get current username and change directory
 CURRENT_USER=$(whoami)
 
@@ -74,19 +72,40 @@ cd $APP_HOME
 # whereis libcrypto.so.1.1
 
 
-if [ -f "$VOL_DATA/my.env" ]; then
-    echo "Using configuration from $VOL_DATA/my.env"
-    cp -f "$VOL_DATA/my.env" "$APP_HOME/weatherBot.env"
-elif [ -f "$APP_HOME/.env-template" ]; then
-    echo "Using template configuration"
-    cp -f "$APP_HOME/.env-template" "$APP_HOME/weatherBot.env"
-fi
 
-
-if is_docker; then
-    echo "Running in Docker, continuing..."
+# check if the stats.yaml file exists, if not, copy the default one
+if [ ! -f "$YAML_DATA/stats.yaml" ]; then
+    printf "stats.yaml not found, copying default\n"
+    cp -f "$APP_HOME/wx-bot-stats.yaml" "$YAML_DATA/stats.yaml"
 else
-    echo "non-dockercurrent directory: $(pwd)"
+    printf "Using existing stats.yaml from $YAML_DATA\n"    
+fi
+cat $YAML_DATA/stats.yaml
+printf "\n"
+echo "--------------------------------"
+
+# check if the config.yaml file exists, if not, copy the default one
+if [ ! -f "$YAML_DATA/config.yaml" ]; then
+    printf "config.yaml not found, copying default\n"
+    cp -f "$APP_HOME/wx-bot-config.yaml" "$YAML_DATA/config.yaml"
+else
+    printf "Using existing config.yaml from $YAML_DATA\n"    
+fi
+cat $YAML_DATA/config.yaml
+printf "\n"
+echo "--------------------------------"
+
+
+SIMPLEX_CHAT_PORT=$(yq e '.simplex-chat-port' "$YAML_DATA/config.yaml")
+
+
+if [ "$APP_HOST" == "docker" ]; then
+    printf "\n"
+    printf "Running in Docker, continuing...\n"
+elif [ "$APP_HOST" == "start9" ]; then
+    printf "Running in Start9, continuing...\n"
+else
+    printf "Running in bash, current directory: $(pwd)\n"
     read -p "Press [Enter] to continue..."
 fi
 
@@ -97,21 +116,24 @@ fi
 
 #while true; do
     # Load environment variables from weatherBot.env
-    export $(cat weatherBot.env | grep -v '^#' | xargs)
-
+    #export $(cat weatherBot.env | grep -v '^#' | xargs)
+    printf "Listing files in $APP_DATA\n"
+    ls -l $APP_DATA
+    printf "\n"
+    echo "--------------------------------"
     # Start the first application with piped input
-    if [ ! -f ./initcli.flag ]; then
-        echo "initcli.flag NOT found, starting wxBot first time"
+    if [ ! -f $DATA_FLDR/initcli.flag ]; then
+        printf "initcli.flag NOT found, starting wxBot first time\n"
         echo "wxBot" | $CLI_HOME/simplex-chat -l error -p ${SIMPLEX_CHAT_PORT:-5225} -d $APP_DATA/jed &
         FIRST_APP_PID=$!
-        touch ./initcli.flag  # Create the flag file here
+        touch $DATA_FLDR/initcli.flag  # Create the flag file here
     else
-        echo "Normal CLI start on port ${SIMPLEX_CHAT_PORT:-5225}"
+        printf "Normal CLI start on port ${SIMPLEX_CHAT_PORT:-5225}\n"
         $CLI_HOME/simplex-chat -l error -p ${SIMPLEX_CHAT_PORT:-5225} -d $APP_DATA/jed &
         FIRST_APP_PID=$!
     fi
 
-    echo "Starting wx-bot-chat.js"
+    printf "Starting wx-bot-chat.js\n"
     sleep 3
     # Try starting node application with retry
     MAX_RETRIES=2
@@ -123,10 +145,10 @@ fi
         # Wait a moment to see if it stays running
         sleep 10
         if kill -0 $SECOND_APP_PID 2>/dev/null; then
-            echo "wx-bot-chat.js started successfully"
+            printf "wx-bot-chat.js started successfully"
             break
         else
-            echo "wx-bot-chat.js failed to start, retrying..."
+            printf "wx-bot-chat.js failed to start, retrying..."
             RETRY_COUNT=$((RETRY_COUNT + 1))
             [ $RETRY_COUNT -lt $MAX_RETRIES ] && sleep 10
         fi

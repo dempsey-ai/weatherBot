@@ -10,6 +10,9 @@ jed_agent.db
 jed_chat.db
 wxbot.env
 my.env
+todo.md
+config.yaml
+stats.yaml
 
 # Logs
 logs

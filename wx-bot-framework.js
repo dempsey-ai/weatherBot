@@ -14,15 +14,15 @@ weatherBot chat client - version 1.0 - Uses SimpleX Chat frameworkto provide wea
 */
 
 
-const fs = require('fs');
+const fs = require('fs').promises;
 const path = require('path');
 const natural = require('natural');
 
 const userManagement = require("./wx-bot-usermgmt")
 const wxBotProviderMap = require("./wxf-providers/wx-bot-provider-map")
+const cfg = require("./wx-bot-config")
 
-require('dotenv').config({ path: './weatherBot.env' });
-const IS_DEBUG = process.env.DEBUG_MODE === 'true';
+
 
 const chatTeal = (someString) => {
   return (someString = " !5 " + someString + "! ")
@@ -54,17 +54,9 @@ const HELP_ADMINHOST_MSG = "\nHere are some Admin/Host examples of messages you 
 +chatYellow('add admin to [ID]')+" (adds user to admin group)\n"
 +chatYellow('remove admin from [ID]')+" (removes user from admin group)\n"
 
-const currentMonth = new Date().getMonth() + 1; // getMonth() returns 0-11, so we add 1
-// If it's June (6), July (7), August (8), or September (9), use summerTempHot
-// Otherwise, use tempHot
-const tempHot = (currentMonth >= 6 && currentMonth <= 9) 
-  ? (process.env.summerTempHot || 85)
-  : (process.env.tempHot || 75);
-  const tempCold = process.env.tempCold || 50;
-
 
 const debugLog = (msg) => {
-    if (IS_DEBUG) {
+    if (cfg.appConfig.isDebug) {
         console.log(msg);
     }
     return;
@@ -89,17 +81,30 @@ const logFunctionName = () => {
 };
 
 // Load word lists
-const weatherTopics = {
-  topic_badWeather: JSON.parse(fs.readFileSync(path.join(__dirname, 'wx-bot-wordlists', 'bad_weather.json'), 'utf8')),
-  topic_wxAlerts: JSON.parse(fs.readFileSync(path.join(__dirname, 'wx-bot-wordlists', 'weather_alerts.json'), 'utf8')),
-  topic_temps: JSON.parse(fs.readFileSync(path.join(__dirname, 'wx-bot-wordlists', 'temperature.json'), 'utf8')),
-  topic_rain: JSON.parse(fs.readFileSync(path.join(__dirname, 'wx-bot-wordlists', 'rain.json'), 'utf8')),
-  topic_wind: JSON.parse(fs.readFileSync(path.join(__dirname, 'wx-bot-wordlists', 'wind.json'), 'utf8')),
-  topic_wxForecasts: JSON.parse(fs.readFileSync(path.join(__dirname, 'wx-bot-wordlists', 'forecasts.json'), 'utf8')),
-  topic_location: JSON.parse(fs.readFileSync(path.join(__dirname, 'wx-bot-wordlists', 'location.json'), 'utf8')),
-  topic_hostFunctions: JSON.parse(fs.readFileSync(path.join(__dirname, 'wx-bot-wordlists', 'host_functions.json'), 'utf8'))
+async function loadTopics() {
+  try {
+      const topics = {
+          topic_badWeather: JSON.parse(await fs.readFile(path.join(__dirname, 'wx-bot-wordlists', 'bad_weather.json'), 'utf8')),
+          topic_wxAlerts: JSON.parse(await fs.readFile(path.join(__dirname, 'wx-bot-wordlists', 'weather_alerts.json'), 'utf8')),
+          topic_temps: JSON.parse(await fs.readFile(path.join(__dirname, 'wx-bot-wordlists', 'temperature.json'), 'utf8')),
+          topic_rain: JSON.parse(await fs.readFile(path.join(__dirname, 'wx-bot-wordlists', 'rain.json'), 'utf8')),
+          topic_wind: JSON.parse(await fs.readFile(path.join(__dirname, 'wx-bot-wordlists', 'wind.json'), 'utf8')),
+          topic_wxForecasts: JSON.parse(await fs.readFile(path.join(__dirname, 'wx-bot-wordlists', 'forecasts.json'), 'utf8')),
+          topic_location: JSON.parse(await fs.readFile(path.join(__dirname, 'wx-bot-wordlists', 'location.json'), 'utf8')),
+          topic_hostFunctions: JSON.parse(await fs.readFile(path.join(__dirname, 'wx-bot-wordlists', 'host_functions.json'), 'utf8'))
+      };
+      return topics;
+  } catch (error) {
+      console.error('Error loading topic files:', error);
+      throw error;
+  }
+}
 
-};
+// Use with initialization
+let weatherTopics;
+(async () => {
+  weatherTopics = await loadTopics();
+})();
 
 // Function to find the best matching topic
 const findBestMatchingTopic = async (input, topics) => {
@@ -993,6 +998,8 @@ const formatUnfilteredTempData = async (wxData) => {
   let formattedData = [];
   let currentDay = null;
 
+
+
   for (let i = 0; i < wxData.wxfPeriod.length; i++) {
     const period = wxData.wxfPeriod[i];
     
@@ -1012,7 +1019,7 @@ const formatUnfilteredTempData = async (wxData) => {
       let formattedString = `${chatTeal(currentDay.name)} (hi: `;
       
       // Add color to high temperature if it exceeds tempHot
-      if (currentDay.highTemp > tempHot) {
+      if (currentDay.highTemp > cfg.appConfig.tempHot) {
         formattedString += chatYellow(`${currentDay.highTemp}°`);
       } else {
         formattedString += `${currentDay.highTemp}°`;
@@ -1021,7 +1028,7 @@ const formatUnfilteredTempData = async (wxData) => {
       if (currentDay.lowTemp !== null) {
         formattedString += `, night: `;
         // Add color to low temperature if it's below tempCold
-        if (currentDay.lowTemp < tempCold) {
+        if (currentDay.lowTemp < cfg.appConfig.tempCold) {
           formattedString += chatBlue(`${currentDay.lowTemp}°`);
         } else {
           formattedString += `${currentDay.lowTemp}°`;
@@ -1372,8 +1379,6 @@ const sendChats = async (chat, wxChatUser, arr, preMsg = null) => {
   }
   return;
 }
-
-
 
 module.exports = {
   HELP_LOCATION_MSG,

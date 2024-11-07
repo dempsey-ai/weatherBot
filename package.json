@@ -41,7 +41,8 @@
     "dotenv": "^16.0.0",
     "isomorphic-ws": "^4.0.1",
     "natural": "^8.0.1",
-    "simplex-chat": "^0.2.0"
+    "simplex-chat": "^0.2.0",
+    "yaml": "^2.6.0"
   },
   "devDependencies": {
     "@types/jest": "^27.5.1",

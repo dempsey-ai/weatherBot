@@ -19,9 +19,9 @@ weatherBot chat client - version 1.0 - Uses SimpleX Chat frameworkto provide wea
 // npm install simplex-chat axios dotenv natural
 
 //npm i simplex-chat
-//npm i axios
-//npm i dotenv
-//npm i natural
+//npm i axios --save
+//npm install yaml --save
+//npm i natural --save
 
 //npm run build
 
@@ -36,33 +36,25 @@ weatherBot chat client - version 1.0 - Uses SimpleX Chat frameworkto provide wea
 console.log("wx-bot-chat.js initializing...");
 console.log(process.cwd());
 
-const fs = require('fs');
 const {ChatClient} = require("simplex-chat")
 const {ChatType} = require("simplex-chat/dist/command")  
 const {ciContentText, ChatInfoType} = require("simplex-chat/dist/response")
 
 const wxBotFramework = require("./wx-bot-framework")
 const userManagement = require("./wx-bot-usermgmt")
-//const envPath = fs.existsSync('./config/my.env') ? './config/my.env' : './weatherBot.env';
-const envPath = './weatherBot.env';
-require('dotenv').config({ path: envPath });
-
-
-const IS_DEBUG = process.env.DEBUG_MODE === 'true';
-const APP_DATA = (process.env.APP_DATA || "./wx-bot-appdata").replace(/\/+$/, "");
-const SIMPLEX_CHAT_PORT = process.env.SIMPLEX_CHAT_PORT || 5225;
-
-const SHARE_BOT_ADDRESS = process.env.shareBotAddress === 'true';
-const INIT_HOST_USER = process.env.initHostUser ? process.env.initHostUser.replace(/^['"]|['"]$/g, '') : '';
-const assignedHostUser = INIT_HOST_USER !== ''; // true if INIT_HOST_USER has a value
-// "/_profile_address 2 on"
-
+const cfg = require("./wx-bot-config")
+const path = require('path');
 
 let wxUsers = {};
 
 
 async function run() {
-  const chat = await ChatClient.create(`ws://localhost:${SIMPLEX_CHAT_PORT}`);
+
+  // Initialize when module loads
+  await cfg.initializeConfigs();
+  const assignedHostUser = cfg.appConfig.initHostUser !== ''; // true if initHostUser has a value
+
+  const chat = await ChatClient.create(`ws://localhost:${cfg.appConfig.simplexChatPort}`);
   const user = await chat.apiGetActiveUser();
   
   if (!user) {
@@ -75,16 +67,14 @@ async function run() {
   const address = (await chat.apiGetUserAddress()) || (await chat.apiCreateUserAddress());
   wxBotFramework.debugLog(`apiGetUserAddress (or apiCreateUserAddress): Bot address: ${address}`);
   
-  // Update WXBOT environment variable with bot address
-  process.env.WXBOT = address;
-  // Write to a volume-mounted file with quotes around the address value
-  fs.writeFileSync(`${APP_DATA}/wxbot.env`, `WXBOT="${address}"`);
-  console.log(`Updated WXBOT.env file with address: "${address}"`);
+    
+  await cfg.updateStatsValue(path.join(cfg.appConfig.paths.userHome, cfg.appConfig.paths.yamlPath, 'stats.yaml'), 'wxbot-address', address);
+  console.log(`Updated stats.yaml file with address: "${address}"`);
   
   
   await chat.enableAddressAutoAccept();
 
-  if (SHARE_BOT_ADDRESS) {
+  if (wxBotFramework.shareBotAddress) {
     try {
       await chat.sendChatCmdStr(`/_profile_address ${user.userId} on`);
     } catch (error) {
@@ -92,9 +82,9 @@ async function run() {
     }
   }
 
-  if (assignedHostUser && INIT_HOST_USER !== '') {
+  if (assignedHostUser && cfg.appConfig.initHostUser !== '') {
     try {
-      let resp = await chat.sendChatCmdStr(`/connect ${INIT_HOST_USER}`);
+      let resp = await chat.sendChatCmdStr(`/connect ${cfg.appConfig.initHostUser}`);
       wxBotFramework.debugLog("Host user connection response:", JSON.stringify(resp, null, 3));
 
       if (resp.chatError) {
@@ -215,7 +205,7 @@ async function handleNewMessage(chat, chatItem) {
     const qualified_msg = await wxBotFramework.evaluateMessage(wxChatUser, msg);
     wxBotFramework.debugLog("Evaluated Msg: " + JSON.stringify(qualified_msg, null, 3));
 
-    if (IS_DEBUG && (wxChatUser.chattyType === "host" || wxChatUser.chattyType === "admin")) {
+    if (cfg.appConfig.isDebug && (wxChatUser.chattyType === "host" || wxChatUser.chattyType === "admin")) {
       await wxBotFramework.sendMessage(chat, wxChatUser, "Evaluated Msg: " + JSON.stringify(qualified_msg, null, 3));
     } 
 

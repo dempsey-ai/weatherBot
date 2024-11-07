@@ -69,10 +69,10 @@ sudo chmod +x /usr/bin/yq
 ### 4. Install the following npm packages:
 
 ```
-npm i simplex-chat
-npm i axios
-npm i dotenv
-npm i natural
+npm i simplex-chat --save
+npm i axios --save
+npm install yaml --save
+npm i natural --save
 ```
 
 ### 4. Install the SimpleX Chat CLI:
