@@ -1,9 +1,28 @@
 {
-  "generalWords": ["location", "zipcode", "zip", "city", "town", "gps", "latitude", "longitude", "coordinates", "position"],
+  "generalWords": [
+    "location", 
+    "map",
+    "poly",
+    "label",
+    "name",
+    "zipcode", 
+    "zip", 
+    "city", 
+    "town", 
+    "gps", 
+    "latitude", 
+    "longitude", 
+    "coordinates", 
+    "position"],
   "specificCriteria": [
     {
+      "label": "requesting map view",
+      "regex": "\\b(?:map|poly)\\b",
+      "parameter": "loc-map:"
+    },
+    {
       "label": "setting location (city, state)",
-      "regex": "\\b(?:location|set|to|is|as)?\\s*([A-Za-z]+(?:\\s+(?!set|to|is|as)[A-Za-z]+)*,\\s*[A-Za-z]{2})\\b",
+      "regex": "\\b(?:set\\s+)?(?:location\\s+)?(?:to\\s+)?([A-Za-z]+(?:\\s+(?!set|to|is|as)[A-Za-z]+)*,\\s*[A-Za-z]{2})\\b",
       "parameter": "loc-city:"
     },
     {
@@ -23,7 +42,7 @@
     },
     {
       "label": "setting location label",
-      "regex": "(?:set\\s+)?location\\s+(?:label|name)\\s*(?:to\\s+)?(?:\"([^\"]+)\"|([^\"\\n]+)$)",
+      "regex": "(?:(?:set\\s+)?(?:location\\s+)?label|name)\\s*(?:(?:to|is|as)\\s+)?(\"[^\"]+\"|[^\"\\s][^\"\\n]*)",
       "parameter": "loc-label:"
     }
   ]

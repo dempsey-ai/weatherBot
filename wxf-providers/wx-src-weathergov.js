@@ -29,11 +29,9 @@
 const axios = require("axios").default
 const badWeatherData = require("../wx-bot-wordlists/bad_weather.json")
 
-require("dotenv").config({path: "../weatherBot.env"})
-const IS_DEBUG = process.env.DEBUG_MODE === "true"
-
+const cfg = require("../wx-bot-config")
 const debugLog = (msg) => {
-  if (IS_DEBUG) {
+  if (cfg.appConfig.isDebug) {
     console.log(msg)
   }
   return
@@ -293,25 +291,21 @@ const provWeatherGov = {
       geoData: geoData,
       forecast: geoGSP.properties.forecast,
       alert: wxaURL,
-      polyMapURL:
-        "https://www.keene.edu/campus/maps/tool/?coordinates=" +
-        "lon1,lat1" +
-        "%0A" +
-        "lon2,lat2" +
-        "%0A" +
-        "lon3,lat3" +
-        "%0A" +
-        "lon4,lat4",
+      polyMapURL: "",
     }
 
     return {isValid: true, newGeoID: retGeoData}
   },
 
   getWXF: async (PwxfURL, PforceRefresh, PkeepTrying) => {
-    // Find the Pikes Peak forecast URL
-    const pikesPeakForecast = provWeatherGov.provGeoData.find((loc) => loc.geoID === "pikespeak")?.forecast
-    // Set wxfURL to Pikes Peak forecast if PwxfURL is undefined
-    let wxfURL = typeof PwxfURL !== "undefined" ? PwxfURL : pikesPeakForecast || "https://api.weather.gov/gridpoints/PUB/82,92/forecast"
+    let wxfURL = ""
+    if (!PwxfURL || typeof PwxfURL !== 'string' || !PwxfURL.startsWith('https://api.weather.gov/')) {
+      return {isValid: false, errMsg: "Invalid or missing forecast URL. Must be a valid weather.gov API URL", wxfData: undefined}
+    }
+    else {
+      wxfURL = PwxfURL
+    }
+    
     let forceRefresh = typeof PforceRefresh !== "undefined" ? PforceRefresh : false
     let keepTrying = typeof PkeepTrying !== "undefined" ? PkeepTrying : false
 
@@ -442,17 +436,17 @@ const provWeatherGov = {
     return {isValid: true, wxfData: geoBlock}
   }, //end of function
 
-  //  getWXF: async (PwxfURL, PforceRefresh, PkeepTrying) => {
-  //  getWXA: async (PuserLabel, PlocType, PsortKey, PgeoID, PwxaURL, PkeepTrying) => {
-
   getWXA: async (PwxaURL, PkeepTrying) => {
-    const pikesPeakAlert = provWeatherGov.provGeoData.find((loc) => loc.geoID === "pikespeak")?.alert
-    // Set wxfURL to Pikes Peak forecast if PwxfURL is undefined
-    let wxfURL =
-      typeof PwxaURL !== "undefined"
-        ? PwxaURL
-        : pikesPeakAlert || "https://api.weather.gov/alerts?point=38.8408655%2C-105.0441532&status=actual&message_type=alert"
-    var keepTrying = typeof PkeepTrying !== "undefined" ? PkeepTrying : false
+    let wxfURL = ""
+    if (!PwxaURL || typeof PwxaURL !== 'string' || !PwxaURL.startsWith('https://api.weather.gov/alerts?')) {
+      return {isValid: false, errMsg: "Invalid or missing alerts URL. Must be a valid weather.gov API URL", wxfData: undefined}
+    }
+    else {
+      wxfURL = PwxaURL
+    }
+
+
+    let keepTrying = typeof PkeepTrying !== "undefined" ? PkeepTrying : false
 
     let resultMsg = "ok"
     let ErrorMsg = "Weather.gov can be flaky, please try again in a few seconds or minutes but it should clear up"
@@ -526,13 +520,17 @@ const provWeatherGov = {
     return {isValid: true, wxaData: validWeather}
   }, //end of function
 
-  getPolyMapURL: async (PwxfURL, PforceRefresh, PkeepTrying) => {
+  getPolyMapURL: async (PwxfURL, PkeepTrying) => {
     debugLog("getPolyMapURL function called...")
     // get the polygon coordinates from the provGeoData
-    const pikesPeakForecast = provWeatherGov.provGeoData.find((loc) => loc.geoID === "pikespeak")?.forecast
-    // Set wxfURL to Pikes Peak forecast if PwxfURL is undefined
-    let wxfURL = typeof PwxfURL !== "undefined" ? PwxfURL : pikesPeakForecast || "https://api.weather.gov/gridpoints/PUB/82,92/forecast"
-    let forceRefresh = typeof PforceRefresh !== "undefined" ? PforceRefresh : false
+    let wxfURL = ""
+    if (!PwxfURL || typeof PwxfURL !== 'string' || !PwxfURL.startsWith('https://api.weather.gov/')) {
+      return {isValid: false, errMsg: "Invalid or missing forecast URL. Must be a valid weather.gov API URL", wxfData: undefined}
+    }
+    else {
+      wxfURL = PwxfURL
+    }
+
     let keepTrying = typeof PkeepTrying !== "undefined" ? PkeepTrying : false
 
     let ErrorMsg = "Weather.gov can be flaky, please try again in a few seconds or minutes but it should clear up"
@@ -596,6 +594,11 @@ const provWeatherGov = {
             polyURL += "%0A"
           }
         })
+
+        // Close the polygon by adding the first point again
+        if (polygon.length > 0) {
+          polyURL += "%0A" + polygon[0][0] + "," + polygon[0][1]
+        }
 
         // Add %0A between polygons if there are multiple
         if (polyIndex < freshWeatherResults.geometry.coordinates.length - 1) {

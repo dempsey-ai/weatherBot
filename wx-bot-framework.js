@@ -616,7 +616,7 @@ const evaluateMessage = async (wxChatUser, msg) => {
 const handleLocationUpdate = async (chat, wxUsers, wxUserId, wxChatUser, qualified_msg) => {
   logFunctionName()
 
-  // Handle location updates - updates to wxUsers should be made here, not in the framework
+  // Handle location updates 
   if (
     qualified_msg.msg_subject === "location" &&
     qualified_msg.isValid &&
@@ -625,10 +625,62 @@ const handleLocationUpdate = async (chat, wxUsers, wxUserId, wxChatUser, qualifi
   ) {
     const [paramType, paramValue] = qualified_msg.qualifiedParameter.split(":")
     let [locationLabel, locationType, locationValue] = ["", "", ""]
+    
+    debugLog("paramType: " + paramType)
+    if (paramType === "loc-map") {
+      debugLog("Polygon map request...")
+      
+      const userLocation = wxChatUser.location
+      if (!userLocation) {
+        debugLog("No location found in provGeoData for map request")
+        await sendMessage(chat, wxChatUser, "You have to set a location first before requesting a map of it. send 'help location' for more info.")
+        return 
+      }
+  
+      const {label, type, value} = userLocation
+      const locLabel = label || `${type}:${value}` // Use label if available, otherwise construct it
+      const locID = value // the label can be a user assigned description, but value is the actual location ID of the original location set by the user
+      
+      const existingLocation = wxBotProviderMap.activeProvider.provGeoData.find((loc) => loc.geoData === locID)
+      if (existingLocation.polyMapURL !== undefined && existingLocation.polyMapURL.includes("https")) {
+        debugLog("existing Location found: " + JSON.stringify(existingLocation.polyMapURL, null, 3))
+
+        const currentLocationInfo = `Your current location is set to: Label=${wxChatUser.location.label} (Location=${wxChatUser.location.value} \nPolygon Mapping Tool URL: ${existingLocation.polyMapURL})`
+        await sendMessage(chat, wxChatUser, currentLocationInfo)
+      }
+      else {
+        debugLog("No location found in provGeoData for map request")
+        await sendMessage(chat, wxChatUser, "You have to set a location first before requesting a map of it. send 'help location' for more info.")
+        return 
+      }
+  
+
+      
+      return
+    }
+
 
     if (["loc-city", "loc-zip", "loc-gps", "loc-label"].includes(paramType)) {
       if (paramType === "loc-label") {
-        locationLabel = paramValue
+        // Convert label to Title Case, handling special characters
+        locationLabel = paramValue.split(/[\s-]+/) // Split on spaces and hyphens
+          .map((word) => {
+          // Skip capitalizing certain words if they're not at the start
+          const lowercaseWords = ['of', 'the', 'and', 'in', 'on', 'at'];
+          if (lowercaseWords.includes(word) && locationLabel !== '') {
+            return word.toLowerCase();
+          }
+          // Handle apostrophes by capitalizing after them
+          return word.replace(/['\s-]/g, (match) => match)  // Preserve special characters
+            .replace(/\w\S*/g, (txt) => {
+              // Capitalize first letter of each word part
+              return txt.charAt(0).toUpperCase() + txt.slice(1).toLowerCase();
+            });
+        })
+        .join(' ') // Rejoin with spaces
+          .replace(/\s+/g, ' ') // Remove extra spaces
+          .trim()
+
         // Use the current location type and value
         //wedebug- wxChatUser = wxUsers[wxUserId];
         locationType = wxChatUser.location.type
@@ -643,8 +695,37 @@ const handleLocationUpdate = async (chat, wxUsers, wxUserId, wxChatUser, qualifi
       } //end of if paramType is loc-label
       else {
         // For other location types, use the location value as the label
-        locationLabel = paramValue
-        locationType = paramType
+        if (paramType === "loc-city") {
+          // Handle city,state format
+          const [city, state] = paramValue.split(",").map(part => part.trim())
+          if (state) {
+            // Format city with proper capitalization
+            const formattedCity = city
+              .split(/[\s-]+/)
+              .map(word => {
+                const lowercaseWords = ['of', 'the', 'and', 'in', 'on', 'at'];
+                if (lowercaseWords.includes(word.toLowerCase()) && locationLabel !== '') {
+                  return word.toLowerCase();
+                }
+                return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+              })
+              .join(' ')
+              .trim();
+            
+            // Format as "City, STATE"
+            locationLabel = `${formattedCity}, ${state.toUpperCase()}`
+          } else {
+            // If no state, just format city
+            locationLabel = city
+              .split(/[\s-]+/)
+              .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+              .join(' ')
+              .trim();
+          }
+        } else {
+          // For zip codes and GPS coordinates, use as-is
+          locationLabel = paramValue
+        }        locationType = paramType
         locationValue = paramValue
 
         // Update user's location information
@@ -662,10 +743,10 @@ const handleLocationUpdate = async (chat, wxUsers, wxUserId, wxChatUser, qualifi
 
         // get the polygon URL
         let polyURL = await wxBotProviderMap.activeProvider.getProvPolyMapURL(wxChatUser)
-        debugLog("polyURL: " + JSON.stringify(polyURL, null, 3))
-
-        // update the geoData with the polyURL
-        wxBotProviderMap.activeProvider.provGeoData.find((loc) => loc.geoID === locationValue).polyMapURL = polyURL
+        if (polyURL.isValid) {
+          // update the geoData with the polyURL
+          wxBotProviderMap.activeProvider.provGeoData.find((loc) => loc.geoData === locationValue).polyMapURL = polyURL.polyURL
+        }
       } //end of else paramType is not loc-label
 
       // things were updated, log the wxChatUser

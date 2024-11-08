@@ -22,11 +22,9 @@ const weatherGov = require("./wx-src-weathergov")
 // then append to the url
 // then open in browser
 
-require("dotenv").config({path: "../weatherBot.env"})
-const IS_DEBUG = process.env.DEBUG_MODE === "true"
-
+const cfg = require("../wx-bot-config")
 const debugLog = (msg) => {
-  if (IS_DEBUG) {
+  if (cfg.appConfig.isDebug) {
     console.log(msg)
   }
   return
@@ -75,19 +73,21 @@ const wxProviderFunctions = {
     const {label, type, value} = userLocation
     const locLabel = label || `${type}:${value}` // Use label if available, otherwise construct it
     const locID = value // the label can be a user assigned description, but value is the actual location ID of the original location set by the user
-
     // Check if location already exists in provGeoData
-    const existingLocation = wxProviderFunctions.provGeoData.find((loc) => loc.geoID === locID)
+    const existingLocation = wxProviderFunctions.provGeoData.find((loc) => loc.geoData === locID)
+    if (existingLocation) {
+      debugLog("existingLocation found: " + JSON.stringify(existingLocation, null, 3))
 
-    const getWXF_result = await weatherGov.provWeatherGov.getWXF(existingLocation.forecast, false, true)
+      const getWXF_result = await weatherGov.provWeatherGov.getWXF(existingLocation.forecast, false, true)
     if (getWXF_result.isValid) {
-      result = true // replace with actual logic
-      return {isValid: result, wxfData: getWXF_result.wxfData}
+        result = true 
+        return {isValid: result, wxfData: getWXF_result.wxfData}
+      }
     }
-
-    // call the provider specific getData function (ex. weathergov) to get the raw data
-    // call the provider specific cleanDatafunction (ex. weathergov) to clean the data to match the template structure
-    // return cleaned data
+    else {
+      debugLog("No forecast URL available for location: " + locID)
+      return {isValid: false, wxfData: undefined}
+    }
 
     return {isValid: result, wxfData: undefined}
   },
@@ -100,21 +100,27 @@ const wxProviderFunctions = {
     const userLocation = wxChatUser.location
     if (!userLocation) {
       debugLog("No location information available for user")
-      return null
+      return {isValid: result, polyURL: undefined}
     }
 
     const {label, type, value} = userLocation
-    const locLabel = label || `${type}:${value}` // Use label if available, otherwise construct it
     const locID = value // the label can be a user assigned description, but value is the actual location ID of the original location set by the user
 
     // Check if location already exists in provGeoData
-    const existingLocation = wxProviderFunctions.provGeoData.find((loc) => loc.geoID === locID)
+    debugLog("getProvPolyMapURL existingLocation search: " + locID)
+    const existingLocation = wxProviderFunctions.provGeoData.find((loc) => loc.geoData === locID)
+    if (existingLocation.forecast) {
+      const getPolyMapURL_result = await weatherGov.provWeatherGov.getPolyMapURL(existingLocation.forecast, true)
 
-    const getPolyMapURL_result = await weatherGov.provWeatherGov.getPolyMapURL(existingLocation.forecast, true, true)
-
-    if (getPolyMapURL_result.isValid) {
-      result = true // replace with actual logic
-      return {isValid: result, polyURL: getPolyMapURL_result.polyURL}
+      if (getPolyMapURL_result.isValid) {
+        result = true 
+        debugLog("getPolyMapURL_result: " + JSON.stringify(getPolyMapURL_result, null, 3))
+        return {isValid: result, polyURL: getPolyMapURL_result.polyURL}
+      }
+    }
+    else {
+      debugLog("No forecast URL available for location: " + locID)
+      return {isValid: false, polyURL: undefined}
     }
 
     // call the provider specific getData function (ex. weathergov) to get the raw data
@@ -139,15 +145,19 @@ const wxProviderFunctions = {
     const locID = value // the label can be a user assigned description, but value is the actual location ID of the original location set by the user
 
     // Check if location already exists in provGeoData
-    const existingLocation = wxProviderFunctions.provGeoData.find((loc) => loc.geoID === locID)
-
+    const existingLocation = wxProviderFunctions.provGeoData.find((loc) => loc.geoData === locID)
+    if (existingLocation.alert) {
     // call the provider specific cleanDatafunction (ex. weathergov) to clean the data to match the template structure
-
-    const getWXA_result = await weatherGov.provWeatherGov.getWXA(existingLocation.alert, true)
-    if (getWXA_result.isValid) {
-      result = true // replace with actual logic
-      // return cleaned data
-      return {isValid: result, wxaData: getWXA_result.wxaData}
+      const getWXA_result = await weatherGov.provWeatherGov.getWXA(existingLocation.alert, true)
+      if (getWXA_result.isValid) {
+        result = true 
+        // return cleaned data
+        return {isValid: result, wxaData: getWXA_result.wxaData}
+      }
+    }
+    else {
+      debugLog("No alert URL available for location: " + locID)
+      return {isValid: false, wxaData: undefined}
     }
 
     return {isValid: result, wxaData: undefined}
@@ -183,7 +193,7 @@ const wxProviderFunctions = {
     const locID = value // the label can be a user assigned description, but value is the actual location ID of the original location set by the user
 
     // Check if location already exists in provGeoData
-    const existingLocation = wxProviderFunctions.provGeoData.find((loc) => loc.geoID === locID)
+    const existingLocation = wxProviderFunctions.provGeoData.find((loc) => loc.geoData === locID)
     if (existingLocation) {
       debugLog(`Location ${locID} already exists in provGeoData`)
       return existingLocation

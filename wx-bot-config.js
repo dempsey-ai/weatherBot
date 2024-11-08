@@ -65,7 +65,7 @@ async function readConfig(filename) {
     //console.log(`readConfig: ${config}`);
     return config
   } catch (error) {
-    debugLog(`Error reading config file ${filename}:`, error)
+    console.error(`Error reading yaml file ${filename}:`, error)
     throw error
   }
 }
@@ -77,7 +77,7 @@ async function updateConfigValue(filename, key, newValue) {
     doc.set(`${key}`, newValue)
     await fs.writeFile(filename, doc.toString())
   } catch (error) {
-    debugLog(`Error updating config value in ${filename}:`, error)
+    console.error(`Error updating config value in ${filename}:`, error)
     throw error
   }
 }
