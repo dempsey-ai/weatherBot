@@ -32,6 +32,7 @@ const debugLog = (msg) => {
 
 // PROVIDER MAP TEMPLATE:
 const wxProviderFunctions = {
+  providerName: weatherGov.provWeatherGov.providerName || "unknown",
   wxfTemplate: [
     {
       geoID: "",

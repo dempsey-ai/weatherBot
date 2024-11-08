@@ -70,11 +70,19 @@ async function run() {
 
   await chat.enableAddressAutoAccept()
 
-  if (wxBotFramework.shareBotAddress) {
+  if (cfg.appConfig.shareBotAddress) {
     try {
       await chat.sendChatCmdStr(`/_profile_address ${user.userId} on`)
     } catch (error) {
       console.error("Error sharing bot address:", error)
+    }
+  }
+
+  if (cfg.appConfig.botDisplayName) {
+    try {
+      await chat.sendChatCmdStr(`/p ${cfg.appConfig.botDisplayName}`)
+    } catch (error) {
+      console.error("Error setting bot display name:", error)
     }
   }
 

@@ -38,6 +38,7 @@ const debugLog = (msg) => {
 }
 
 const provWeatherGov = {
+  providerName: "weather.gov",
   provGeoData: [
     {
       geoID: "80809",
@@ -45,6 +46,7 @@ const provWeatherGov = {
       geoData: "80809",
       forecast: "https://api.weather.gov/gridpoints/PUB/84,95/forecast",
       alert: "https://api.weather.gov/alerts?point=38.91181%2C-104.98553&status=actual&message_type=alert",
+      polyMapURL: "",
     },
     {
       geoID: "pikespeak",
@@ -52,6 +54,7 @@ const provWeatherGov = {
       geoData: "38.8408655,-105.0441532",
       forecast: "https://api.weather.gov/gridpoints/PUB/82,92/forecast",
       alert: "https://api.weather.gov/alerts?point=38.8408655%2C-105.0441532&status=actual&message_type=alert",
+      polyMapURL: "",
     },
   ],
 

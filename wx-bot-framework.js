@@ -21,6 +21,8 @@ const userManagement = require("./wx-bot-usermgmt")
 const wxBotProviderMap = require("./wxf-providers/wx-bot-provider-map")
 const cfg = require("./wx-bot-config")
 
+const activeProviderName = wxBotProviderMap.activeProvider.providerName
+
 const chatTeal = (someString) => {
   return (someString = " !5 " + someString + "! ")
 }
@@ -59,7 +61,10 @@ const HELP_LOCATION_MSG =
   "\n" +
   chatYellow("location 38.8408655,-105.0441532") +
   "\n" +
-  chatYellow('location label "pikes peak"')
+  chatYellow("location label pikes peak") +
+  "\n" +
+  chatYellow("location map") +
+  " (URL link to your precise GPS shape used for weather alerts and forecasts)\n" 
 const HELP_EXAMPLES_MSG =
   "\nHere are some examples of messages you can send to get weather information for your current location:\n\n" +
   chatYellow("temps") +
@@ -645,7 +650,7 @@ const handleLocationUpdate = async (chat, wxUsers, wxUserId, wxChatUser, qualifi
       if (existingLocation.polyMapURL !== undefined && existingLocation.polyMapURL.includes("https")) {
         debugLog("existing Location found: " + JSON.stringify(existingLocation.polyMapURL, null, 3))
 
-        const currentLocationInfo = `Your current location is set to: Label=${wxChatUser.location.label} (Location=${wxChatUser.location.value} \nPolygon Mapping Tool URL: ${existingLocation.polyMapURL})`
+        const currentLocationInfo = `Current Provider: ${activeProviderName}\nYour current location is set to: Label=${wxChatUser.location.label} (Location=${wxChatUser.location.value} \nPolygon Mapping Tool URL: ${existingLocation.polyMapURL})`
         await sendMessage(chat, wxChatUser, currentLocationInfo)
       }
       else {
@@ -690,7 +695,7 @@ const handleLocationUpdate = async (chat, wxUsers, wxUserId, wxChatUser, qualifi
         //wxUsers = await userManagement.updateUserLocation(wxUsers, wxUserId, locationLabel, locationType, locationValue);
         //wedebug- wxChatUser = wxUsers[wxUserId];
         await userManagement.updateUserLocation(wxUsers, wxUserId, wxChatUser, locationLabel, locationType, locationValue)
-        const currentLocationInfo = `Your current location is set to: Label=${wxChatUser.location.label} (Location=${wxChatUser.location.value})`
+        const currentLocationInfo = `Current Provider: ${activeProviderName}\nYour current location is set to: Label=${wxChatUser.location.label} (Location=${wxChatUser.location.value})`
         await sendMessage(chat, wxChatUser, currentLocationInfo)
       } //end of if paramType is loc-label
       else {
@@ -735,7 +740,7 @@ const handleLocationUpdate = async (chat, wxUsers, wxUserId, wxChatUser, qualifi
         debugLog("newGeoData: " + JSON.stringify(newGeoData, null, 3))
 
         // Confirm the location update to the user
-        const currentLocationInfo = `Your current location is set to: Label=${locationLabel} (Location=${locationValue})`
+        const currentLocationInfo = `Current Provider: ${activeProviderName}\nYour current location is set to: Label=${locationLabel} (Location=${locationValue})`
         await sendMessage(chat, wxChatUser, currentLocationInfo)
 
         // prime the weather forecast data cache with this new location id
@@ -753,7 +758,7 @@ const handleLocationUpdate = async (chat, wxUsers, wxUserId, wxChatUser, qualifi
       debugLog("wxChatUser: " + JSON.stringify(wxChatUser, null, 3))
     } else if (wxChatUser.locationValue) {
       // If no valid parameter but a location is set, send current location info
-      const currentLocationInfo = `Your current location is set to: Label=${wxChatUser.location.label} (Location=${wxChatUser.location.value})`
+      const currentLocationInfo = `Current Provider: ${activeProviderName}\nYour current location is set to: Label=${wxChatUser.location.label} (Location=${wxChatUser.location.value})`
       await sendMessage(chat, wxChatUser, currentLocationInfo)
     } else {
       // If no valid parameter and no location is set
@@ -765,7 +770,7 @@ const handleLocationUpdate = async (chat, wxUsers, wxUserId, wxChatUser, qualifi
     if (wxChatUser.location) {
       debugLog("wxChatUser.location: " + JSON.stringify(wxChatUser.location, null, 3))
       // If no valid parameter but a location is set, send current location info
-      const currentLocationInfo = `Your current location is set to: Label=${wxChatUser.location.label} (Location=${wxChatUser.location.value})`
+      const currentLocationInfo = `Current Provider: ${activeProviderName}\nYour current location is set to: Label=${wxChatUser.location.label} (Location=${wxChatUser.location.value})`
       await sendMessage(chat, wxChatUser, currentLocationInfo)
       return
     } else {

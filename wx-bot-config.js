@@ -41,9 +41,11 @@ async function initializeConfigs() {
 
     // Set config values
     appConfig.simplexChatPort = configyaml.get("simplex-chat-port") || 5225
-    appConfig.shareBotAddress = configyaml.get("share-bot-address") === "true"
+    appConfig.shareBotAddress = configyaml.get("share-bot-address") === true
     appConfig.initHostUser = configyaml.get("init-host-user") || ""
     appConfig.isDebug = configyaml.get("debug-mode") === true
+    appConfig.botDisplayName = configyaml.get("bot-display-name") || "wxBot"
+    
 
     // Set temperature thresholds
     appConfig.tempHot = currentMonth >= 6 && currentMonth <= 9 ? configyaml.get("summer-temp-hot") || 85 : configyaml.get("temp-hot") || 75
