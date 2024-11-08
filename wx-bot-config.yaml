@@ -28,7 +28,7 @@ share-bot-address: true
 
 # bot-display-name, the name displayed in the Simplex Chat UI for the weatherBot
 # Note: this has no effect on the bot's functionality.  It can be the provider's name or anything else
-bot-display-name: wxBot-Start9
+bot-display-name: weather.gov
 
 # initHostUser, optional Simplex user address to use (or reset) the initial host/admin user upon (re)startup
 # value needs to be quoted due to Simplex use of special chars
