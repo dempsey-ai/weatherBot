@@ -91,8 +91,8 @@ const provWeatherGov = {
     nextSunday.setDate(startDate.getDate() + daysUntilNextSunday)
     nextSunday.setHours(0, 0, 0, 0) // Set to start of next Sunday
 
-    // If the period is in the week after next Sunday
-    if (periodDate >= nextSunday && periodDate.getDay() <= startDay) {
+    // If the period is after next Sunday AND it's not Sunday
+    if (periodDate > nextSunday && periodDate.getDay() !== 0) {
       return "Next " + pedValue.name
     }
 
