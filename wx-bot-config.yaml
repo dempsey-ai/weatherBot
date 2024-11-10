@@ -30,6 +30,10 @@ share-bot-address: true
 # Note: this has no effect on the bot's functionality.  It can be the provider's name or anything else
 bot-display-name: weather.gov
 
+
+# weather provider API key needed, specific to each provider, and optionally not needed for some providers
+weather-provider-api-key: 
+
 # initHostUser, optional Simplex user address to use (or reset) the initial host/admin user upon (re)startup
 # value needs to be quoted due to Simplex use of special chars
 init-host-user:

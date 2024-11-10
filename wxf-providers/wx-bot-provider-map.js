@@ -2,17 +2,15 @@
 
 // THE PROVIDERS COULD BE:
 // 1. weather.gov
-// 2. openweathermap.org
-// 3. wunderground.com
-// 4. accuweather.com
-// 5. weatherapi.com
-// 6. weatherstack.com
-// 7. weatherbit.io
+// 2. weatherbit.io (50 calls/day, 7 day forecast)
+// 3. openweathermap.org (5 day forecast)
 
 // CURRENTLY IMPLEMENTED PROVIDERS:
 // 1. weather.gov
-// 2. openweathermap.org
 const weatherGov = require("./wx-src-weathergov")
+// 2. weatherbit.io
+const weatherBit = require("./wx-src-weatherbit")
+
 //const openWeatherMap = require("./wx-src-openweathermap");
 //const openMeteo = require("./wx-src-openmeteo");
 
@@ -31,7 +29,7 @@ const debugLog = (msg) => {
 }
 
 // PROVIDER MAP TEMPLATE:
-const wxProviderFunctions = {
+const wxWgovFunctions = {
   providerName: weatherGov.provWeatherGov.providerName || "unknown",
   wxfTemplate: [
     {
@@ -68,14 +66,14 @@ const wxProviderFunctions = {
     const userLocation = wxChatUser.location
     if (!userLocation) {
       debugLog("No location information available for user")
-      return null
+      return {isValid: false, wxfData: undefined}
     }
 
     const {label, type, value} = userLocation
     const locLabel = label || `${type}:${value}` // Use label if available, otherwise construct it
     const locID = value // the label can be a user assigned description, but value is the actual location ID of the original location set by the user
     // Check if location already exists in provGeoData
-    const existingLocation = wxProviderFunctions.provGeoData.find((loc) => loc.geoData === locID)
+    const existingLocation = wxWgovFunctions.provGeoData.find((loc) => loc.geoData === locID)
     if (existingLocation) {
       debugLog("existingLocation found: " + JSON.stringify(existingLocation, null, 3))
 
@@ -109,7 +107,7 @@ const wxProviderFunctions = {
 
     // Check if location already exists in provGeoData
     debugLog("getProvPolyMapURL existingLocation search: " + locID)
-    const existingLocation = wxProviderFunctions.provGeoData.find((loc) => loc.geoData === locID)
+    const existingLocation = wxWgovFunctions.provGeoData.find((loc) => loc.geoData === locID)
     if (existingLocation.forecast) {
       const getPolyMapURL_result = await weatherGov.provWeatherGov.getPolyMapURL(existingLocation.forecast, true)
 
@@ -146,7 +144,7 @@ const wxProviderFunctions = {
     const locID = value // the label can be a user assigned description, but value is the actual location ID of the original location set by the user
 
     // Check if location already exists in provGeoData
-    const existingLocation = wxProviderFunctions.provGeoData.find((loc) => loc.geoData === locID)
+    const existingLocation = wxWgovFunctions.provGeoData.find((loc) => loc.geoData === locID)
     if (existingLocation.alert) {
     // call the provider specific cleanDatafunction (ex. weathergov) to clean the data to match the template structure
       const getWXA_result = await weatherGov.provWeatherGov.getWXA(existingLocation.alert, true)
@@ -168,16 +166,12 @@ const wxProviderFunctions = {
     // Implement logic to convert the user saved location into the appropriate provider specific location
     let result = false
 
-    // TODO: extract the location from the wxChatUser
     let userLocation = wxChatUser.location
-    // TODO: ADD LOGIC TO GET TEMPERATURE DATA FROM THE APPROPRIATE PROVIDER
     let newGeoData = await weatherGov.provWeatherGov.createGeoData(userLocation.label, userLocation.type, userLocation.value)
 
     debugLog("newGeoData: " + JSON.stringify(newGeoData, null, 3))
 
-    // add the newGeoData to the global list of geoData
-
-    result = true // replace with actual logic
+    result = true 
     return {isValid: result}
   },
 
@@ -186,7 +180,7 @@ const wxProviderFunctions = {
     const userLocation = wxChatUser.location
     if (!userLocation) {
       debugLog("No location information available for user")
-      return null
+      return undefined
     }
 
     const {label, type, value} = userLocation
@@ -194,7 +188,7 @@ const wxProviderFunctions = {
     const locID = value // the label can be a user assigned description, but value is the actual location ID of the original location set by the user
 
     // Check if location already exists in provGeoData
-    const existingLocation = wxProviderFunctions.provGeoData.find((loc) => loc.geoData === locID)
+    const existingLocation = wxWgovFunctions.provGeoData.find((loc) => loc.geoData === locID)
     if (existingLocation) {
       debugLog(`Location ${locID} already exists in provGeoData`)
       return existingLocation
@@ -204,25 +198,163 @@ const wxProviderFunctions = {
     try {
       const newGeoData = await weatherGov.provWeatherGov.createGeoData(locLabel, type, value)
       if (newGeoData.isValid) {
-        wxProviderFunctions.provGeoData.push(newGeoData.newGeoID)
+        wxWgovFunctions.provGeoData.push(newGeoData.newGeoID)
         console.log(`Added new location ${locLabel} to provGeoData`)
         return newGeoData.newGeoID
       } else {
         console.log(`Failed to create geo data for ${locLabel}`)
-        return null
+        return undefined
       }
     } catch (error) {
       console.error(`Error creating geo data for ${locLabel}:`, error)
-      return null
+      return undefined
     }
   },
 }
 
-// ADDITIONAL PROVIDERS:
-// TODO: ADD THE OPENWEATHERMAP PROVIDER MAP ENTRY HERE
 
-// CURRENT ACTIVE PROVIDER:
-const activeProvider = wxProviderFunctions
-// TODO: USE TEMPLATE TO ADD PROVIDER MAPPINGS
+
+const wxWbitFunctions = {
+  providerName: weatherBit.provWeatherBit.providerName || "unknown",
+  wxfTemplate: [
+    {
+      geoID: "",
+      geoType: "",
+      refDateTimeInt: 0,
+      wxfPeriod: [
+        {
+          wxfPeriod: {},
+          asofStamp: {},
+          wxfDayName: {},
+          wxfWindSpeed: {},
+          wxfPrecip: {},
+          wxfTemp: {},
+          wxfIsDaytime: {},
+          wxfDescr: {},
+          refDayName: {},
+          refBadFlag: {},
+        },
+      ],
+    },
+  ],
+
+  provGeoData: weatherBit.provWeatherBit.provGeoData,
+  provCacheData: weatherBit.provWeatherBit.provCacheData,
+
+  getProvForecastData: async (wxChatUser) => {
+    debugLog("getProvForecastsData function called...")
+    let result = false
+
+    const userLocation = wxChatUser.location
+    if (!userLocation) {
+      debugLog("No location information available for user")
+      return {isValid: false, wxfData: undefined}
+    }
+
+    const {label, type, value} = userLocation
+    const locLabel = label || `${type}:${value}`
+    const locID = value
+
+    const existingLocation = wxWbitFunctions.provGeoData.find((loc) => loc.geoData === locID)
+    if (existingLocation) {
+      debugLog("existingLocation found: " + JSON.stringify(existingLocation, null, 3))
+
+      const getWXF_result = await weatherBit.provWeatherBit.getWXF(existingLocation.forecast, false, true)
+      if (getWXF_result.isValid) {
+        result = true 
+        return {isValid: result, wxfData: getWXF_result.wxfData}
+      }
+    }
+    else {
+      debugLog("No forecast URL available for location: " + locID)
+      return {isValid: false, wxfData: undefined}
+    }
+
+    return {isValid: result, wxfData: undefined}
+  },
+
+  getProvPolyMapURL: async (wxChatUser) => {
+    debugLog("getProvPolyMapURL function called...")
+    // Weatherbit.io doesn't support polygon mapping
+    return {isValid: false, errMsg: "Polygon mapping not supported by weatherbit.io", polyURL: undefined}
+  },
+
+  getwxAlertsData: async (wxChatUser) => {
+    let result = false
+    const userLocation = wxChatUser.location
+    if (!userLocation) {
+      debugLog("No location information available for user")
+      return null
+    }
+
+    const {label, type, value} = userLocation
+    const locLabel = label || `${type}:${value}`
+    const locID = value
+
+    const existingLocation = wxWbitFunctions.provGeoData.find((loc) => loc.geoData === locID)
+    if (existingLocation.alert) {
+      const getWXA_result = await weatherBit.provWeatherBit.getWXA(existingLocation.alert, true)
+      if (getWXA_result.isValid) {
+        result = true 
+        return {isValid: result, wxaData: getWXA_result.wxaData}
+      }
+    }
+    else {
+      debugLog("No alert URL available for location: " + locID)
+      return {isValid: false, wxaData: undefined}
+    }
+
+    return {isValid: result, wxaData: undefined}
+  },
+
+  createProvGeoLoc: async (wxChatUser) => {
+    let result = false
+    let userLocation = wxChatUser.location
+    let newGeoData = await weatherBit.provWeatherBit.createGeoData(userLocation.label, userLocation.type, userLocation.value)
+
+    debugLog("newGeoData: " + JSON.stringify(newGeoData, null, 3))
+    result = true 
+    return {isValid: result}
+  },
+
+  updateProvGeoData: async function (wxChatUser) {
+    const userLocation = wxChatUser.location
+    if (!userLocation) {
+      debugLog("No location information available for user")
+      return undefined
+    }
+
+    const {label, type, value} = userLocation
+    const locLabel = label || `${type}:${value}`
+    const locID = value
+
+    const existingLocation = wxWbitFunctions.provGeoData.find((loc) => loc.geoData === locID)
+    if (existingLocation) {
+      debugLog(`Location ${locID} already exists in provGeoData`)
+      return existingLocation
+    }
+
+    try {
+      const newGeoData = await weatherBit.provWeatherBit.createGeoData(locLabel, type, value)
+      if (newGeoData.isValid) {
+        wxWbitFunctions.provGeoData.push(newGeoData.newGeoID)
+        console.log(`Added new location ${locLabel} to provGeoData`)
+        return newGeoData.newGeoID
+      } else {
+        console.log(`Failed to create geo data for ${locLabel}`)
+        return undefined
+      }
+    } catch (error) {
+      console.error(`Error creating geo data for ${locLabel}:`, error)
+      return undefined
+    }
+  },
+}
+
+// To use weatherbit.io provider, uncomment this line:
+// const activeProvider = wxWbitFunctions
+
+// Currently using weather.gov provider:
+const activeProvider = wxWgovFunctions
 
 module.exports = {activeProvider}

@@ -13,6 +13,9 @@ my.env
 todo.md
 config.yaml
 stats.yaml
+gitnotes.md
+weather-gov.json
+weatherbit-io.json
 
 # Logs
 logs
