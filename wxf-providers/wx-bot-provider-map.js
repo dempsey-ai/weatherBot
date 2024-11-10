@@ -352,9 +352,9 @@ const wxWbitFunctions = {
 }
 
 // To use weatherbit.io provider, uncomment this line:
-// const activeProvider = wxWbitFunctions
+ const activeProvider = wxWbitFunctions
 
 // Currently using weather.gov provider:
-const activeProvider = wxWgovFunctions
+//const activeProvider = wxWgovFunctions
 
 module.exports = {activeProvider}
