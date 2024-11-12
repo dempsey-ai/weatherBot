@@ -6,6 +6,8 @@
 const axios = require("axios").default
 const badWeatherData = require("../wx-bot-wordlists/bad_weather.json")
 const cfg = require("../wx-bot-config")
+const { WX_DATA_TYPES, WX_CAPABILITIES, WX_PERIOD_RESOLUTION } = require('./wx-provider-types')
+const { WxDay, WxPeriod, WxDataNormalizer } = require('./wx-data-normalizer')
 
 const debugLog = (msg) => {
   if (cfg.appConfig.isDebug) {
@@ -16,6 +18,9 @@ const debugLog = (msg) => {
 
 const provWeatherBit = {
   providerName: "weatherbit.io",
+  providerType: WX_DATA_TYPES.DAILY,
+  periodResolution: WX_PERIOD_RESOLUTION.DAILY,
+  capabilities: [WX_CAPABILITIES.ALERTS],
   provGeoData: [],
   provCacheData: [],
 
@@ -89,7 +94,9 @@ const provWeatherBit = {
       geoData: geoData,
       forecast: "",
       alert: "",
-      polyMapURL: ""
+      polyMapURL: "",
+      providerType: provWeatherBit.providerType,
+      periodResolution: provWeatherBit.periodResolution
     }
 
     // Build API URLs based on location type
@@ -141,64 +148,23 @@ const provWeatherBit = {
     const badWeatherWords = badWeatherData.specificCriteria[0].parameter
     const geoBuild = []
 
-    // Process each day's forecast and create both day/night periods
-    freshWeatherResults.data.forEach((day, index) => {
-      const dayTemp = day.high_temp
-      const nightTemp = day.low_temp
-      const description = day.weather.description
-      const windSpeed = day.wind_spd
-      const precipitation = day.pop
-      const validDate = new Date(day.valid_date)
-      const dayName = provWeatherBit.getDayName(validDate)
-
-      // Check for bad weather conditions
-      const setBadFlag = badWeatherWords.some(word => 
-        description.toLowerCase().includes(word.toLowerCase())
-      )
-
-      // Create daytime period
-      geoBuild.push({
-        wxfPeriod: index * 2,
-        wxfDayName: dayName,
-        wxfWindSpeed: `${Math.round(windSpeed)} mph`,
-        wxfPrecip: precipitation,
-        wxfTemp: Math.round(dayTemp),
-        wxfIsDaytime: true,
-        wxfDescr: provWeatherBit.createEnhancedDescription(day),
-        refDayName: dayName,
-        refDOW: dayName,
-        refDOW_int: validDate.getDay() + 1,
-        refNextDayFlag: index === 1,
-        refRainPrecip: precipitation,
-        refWindSpeed: Math.round(windSpeed),
-        refGustSpeedMax: Math.round(day.wind_gust_spd),
-        refBadFlag: setBadFlag
+    const normalizedDays = freshWeatherResults.data
+      .filter(dayData => {
+        const forecastDate = new Date(dayData.valid_date)
+        const today = new Date()
+        // Set to midnight for clean date comparison
+        today.setHours(0, 0, 0, 0)
+        forecastDate.setHours(0, 0, 0, 0)
+        return forecastDate >= today
       })
-
-      // Create nighttime period
-      geoBuild.push({
-        wxfPeriod: index * 2 + 1,
-        wxfDayName: `${dayName} Night`,
-        wxfWindSpeed: `${Math.round(windSpeed)} mph`,
-        wxfPrecip: precipitation,
-        wxfTemp: Math.round(nightTemp),
-        wxfIsDaytime: false,
-        wxfDescr: `Night time low temperature of ${Math.round(nightTemp)} degrees`,
-        refDayName: `${dayName} Night`,
-        refDOW: dayName,
-        refDOW_int: validDate.getDay() + 1,
-        refNextDayFlag: false,
-        refRainPrecip: precipitation,
-        refWindSpeed: Math.round(windSpeed),
-        refGustSpeedMax: Math.round(day.wind_gust_spd),
-        refBadFlag: setBadFlag
-      })
-    })
+      .map(dayData => provWeatherBit.normalizeData(dayData))
 
     geoBlock = {
       wxfURL: wxfURL,
       refDateTimeInt: cacheTime,
-      wxfPeriod: geoBuild
+      providerType: provWeatherBit.providerType,
+      periodResolution: provWeatherBit.periodResolution,
+      wxfData: normalizedDays
     }
 
     provWeatherBit.provCacheData.push(geoBlock)
@@ -223,14 +189,27 @@ const provWeatherBit = {
 
     const validAlerts = alertResults.alerts.map((alert, index) => ({
       wxfPeriod: index,
-      wxfDayName: alert.expires_at,
+      wxfDayName: alert.expires_local,
       wxfDescr: alert.description,
-      refDayName: `expires: ${alert.expires_at}`,
+      refDayName: `expires: ${alert.expires_local}`,
       doReport: true,
-      formatted: `expires: ${provWeatherBit.formatDateTime(alert.expires_at)} - ${alert.title}\n${alert.description}`
+      formatted: `expires: ${provWeatherBit.formatAlertTime(alert.expires_local)} - ${alert.title}\n${alert.description}`
     }))
 
     return {isValid: true, wxaData: validAlerts}
+  },
+
+  formatAlertTime: (dateString) => {
+    const date = new Date(dateString)
+    const options = {
+      weekday: "long",
+      month: "long", 
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZoneName: "short"
+    }
+    return date.toLocaleString("en-US", options)
   },
 
   // Weatherbit.io doesn't provide polygon data for mapping
@@ -297,10 +276,10 @@ const provWeatherBit = {
       else rainIntensity = "very heavy"
 
       let rainLikelihood = ""
-      if (dayData.pop >= 80) rainLikelihood = "Expect"
-      else if (dayData.pop >= 60) rainLikelihood = "Likely to see"
-      else if (dayData.pop >= 40) rainLikelihood = "Chance of"
-      else rainLikelihood = "Slight chance of"
+      if (dayData.pop >= 80) rainLikelihood = dayData.pop + "% chance, expect"
+      else if (dayData.pop >= 60) rainLikelihood = dayData.pop + "% chance, likely to see"
+      else if (dayData.pop >= 40) rainLikelihood = dayData.pop + "% chance of"
+      else rainLikelihood = dayData.pop + "% slight chance of"
 
       if (dayData.precip >= 0.1) {
         let rainPhrase = `${rainLikelihood} ${rainIntensity} rain`
@@ -314,10 +293,10 @@ const provWeatherBit = {
     // Snow narrative (if applicable)
     if (dayData.snow > 0) {
       let snowIntensity = ""
-      if (dayData.snow < 2) snowIntensity = "Light snow"
-      else if (dayData.snow < 4) snowIntensity = "Moderate snow"
-      else if (dayData.snow < 6) snowIntensity = "Heavy snow"
-      else snowIntensity = "Blizzard conditions"
+      if (dayData.snow < 2) snowIntensity = dayData.snow + "% chance, light snow"
+      else if (dayData.snow < 4) snowIntensity = dayData.snow + "% chance, moderate snow"
+      else if (dayData.snow < 6) snowIntensity = dayData.snow + "% chance, heavy snow"
+      else snowIntensity = dayData.snow + "% chance, blizzard conditions"
       
       description.push(snowIntensity)
     }
@@ -356,6 +335,7 @@ const provWeatherBit = {
     // Add night time low temperature
     description.push(`Night time low temp of ${Math.round(dayData.low_temp)}°F`)
 
+
     // Sun/Moon narrative
     const sunrise = new Date(dayData.sunrise_ts * 1000)
     const sunset = new Date(dayData.sunset_ts * 1000)
@@ -370,18 +350,56 @@ const provWeatherBit = {
     
     // Add moon phase only at significant points
     if (Math.abs(moonPhase - 0) < 0.05 || Math.abs(moonPhase - 1) < 0.05) {
-      description.push("New moon")
+      description.push(" !6 New moon!")
     } else if (Math.abs(moonPhase - 0.25) < 0.05) {
-      description.push("First quarter moon")
+      description.push(" !6 First quarter moon!")
     } else if (Math.abs(moonPhase - 0.5) < 0.05) {
-      description.push("Full moon")
+      description.push(" !6 Full moon!")
     } else if (Math.abs(moonPhase - 0.75) < 0.05) {
-      description.push("Last quarter moon")
+      description.push(" !6 Last quarter moon!")
     }
     
     // Combine all elements into a natural-sounding description
     return description.join(". ") + "."
+  },
+
+  normalizeData: (rawData) => {
+    const description = provWeatherBit.createEnhancedDescription(rawData)
+    const forecastDate = new Date(rawData.valid_date)
+    const adjustedDayName = WxDataNormalizer.getAdjustedDayName(forecastDate)
+
+    return new WxDay({
+      date: forecastDate,
+      dayOfWeek: adjustedDayName,
+      highTemp: rawData.high_temp || 0,
+      lowTemp: rawData.low_temp || 0,
+      description: description,
+      precipProb: rawData.pop || 0,
+      precipAmount: rawData.precip || 0,
+      windSpeed: rawData.wind_spd || 0,
+      windGust: rawData.wind_gust_spd || 0,
+      windDir: rawData.wind_cdir_full || "",
+      isBadWeather: WxDataNormalizer.checkForBadWeather(description),
+      periods: [{
+        timeOfDay: 'day',
+        startTime: forecastDate.setHours(6, 0, 0, 0),
+        endTime: forecastDate.setHours(18, 0, 0, 0),
+        temp: rawData.high_temp || 0,
+        description: description,
+        precip: rawData.pop || 0,
+        precipAmount: rawData.precip || 0,
+        wind: {
+          speed: rawData.wind_spd || 0,
+          gust: rawData.wind_gust_spd || 0,
+          direction: rawData.wind_cdir_full || ""
+        },
+        clouds: (rawData.clouds_low + rawData.clouds_mid + rawData.clouds_hi) / 3 || 0,
+        visibility: rawData.vis || 0
+      }]
+    })
   }
+
+  
 }
 
 module.exports = {provWeatherBit} 

@@ -37,8 +37,14 @@ const debugLog = (msg) => {
   return
 }
 
+const { WX_DATA_TYPES, WX_CAPABILITIES, WX_PERIOD_RESOLUTION } = require('./wx-provider-types')
+const { WxDay, WxPeriod, WxDataNormalizer } = require('./wx-data-normalizer')
+
 const provWeatherGov = {
   providerName: "weather.gov",
+  providerType: WX_DATA_TYPES.MULTI_PERIOD,
+  periodResolution: WX_PERIOD_RESOLUTION.TWELVE_HOUR,
+  capabilities: [WX_CAPABILITIES.ALERTS, WX_CAPABILITIES.POLYGONS],
   provGeoData: [
     {
       geoID: "80809",
@@ -244,11 +250,6 @@ const provWeatherGov = {
   },
 
   createGeoData: async (locLabel, geoType, geoData) => {
-    //              forecast: "https://api.weather.gov/gridpoints/PUB/82,92/forecast",
-    //              alert: "https://api.weather.gov/alerts?point=" + "38.8408655" + "%2C" + "-105.0441532" + "&status=actual&message_type=alert"
-
-    debugLog("createGeoData: locLabel= " + locLabel + " geoType= " + geoType + " geoData= " + geoData)
-
     let retGeoData = {
       geoID: locLabel,
       geoType: geoType,
@@ -256,6 +257,8 @@ const provWeatherGov = {
       forecast: "",
       alert: "",
       polyMapURL: "",
+      providerType: provWeatherGov.providerType,
+      periodResolution: provWeatherGov.periodResolution
     }
 
     let result = "ok"
@@ -395,47 +398,16 @@ const provWeatherGov = {
     let setBadFlag = false
     let lowercaseDetailedForecast = ""
 
-    geoBlock = {wxfURL: wxfURL, refDateTimeInt: cacheTime, wxfBlock: []}
-    freshWeatherResults.properties.periods.forEach(function (pedValue, pedKey) {
-      setBadFlag = false
-      // Convert the detailedForecast to lowercase once for efficiency
-      lowercaseDetailedForecast = pedValue.detailedForecast.toLowerCase()
-      // Extract the integer value from the probabilityOfPrecipitation
-      let extractedRainPrecip = provWeatherGov.extractInteger(pedValue.probabilityOfPrecipitation.value)
+    const normalizedDays = provWeatherGov.normalizeData(freshWeatherResults)
 
-      // Check if any of the bad weather words are in the detailed forecast
-      setBadFlag = badWeatherWords.some((word) => lowercaseDetailedForecast.includes(word.toLowerCase()))
+    geoBlock = {
+      wxfURL: wxfURL,
+      refDateTimeInt: cacheTime,
+      providerType: provWeatherGov.providerType,
+      periodResolution: provWeatherGov.periodResolution,
+      wxfData: normalizedDays
+    }
 
-      const currentDay = provWeatherGov.getDayName(new Date())
-      const adjustedName = provWeatherGov.adjustDayName(pedValue.name, currentDay, pedValue.isDaytime)
-      const startDate = new Date() // Or however you determine the start date
-
-      geoBuild.push({
-        wxfPeriod: pedKey,
-        wxfDayName: pedValue.name,
-        wxfWindSpeed: pedValue.windSpeed,
-        wxfPrecip: pedValue.probabilityOfPrecipitation.value,
-        wxfTemp: pedValue.temperature,
-        wxfIsDaytime: pedValue.isDaytime,
-        wxfDescr: pedValue.detailedForecast,
-        refDOW: adjustedName,
-        refDOW_int: provWeatherGov.getDayOfWeekInt(adjustedName),
-        refDayName: provWeatherGov.getAdjustedDayName(parseInt(pedKey), pedValue, startDate),
-        refNextDayFlag: (pedKey === 1 || pedKey === 2) && pedValue.isDaytime ? true : false,
-        refRainPrecip:
-          (extractedRainPrecip === 0 || extractedRainPrecip === null) && lowercaseDetailedForecast.includes("rain.")
-            ? 100
-            : extractedRainPrecip,
-
-        refWindSpeed: provWeatherGov.extractWindSpeed(pedValue.windSpeed),
-        refGustSpeedMax: provWeatherGov.extractGustSpeed(pedValue.detailedForecast),
-        refBadFlag: setBadFlag,
-      })
-    })
-    geoBlock.wxfPeriod = geoBuild
-    provWeatherGov.provCacheData.push(geoBlock)
-
-    //geoBlock.push({geoID: geoID, asofStamp: {}, wxfPeriod: 1, wxfDayName: "Tonight" })
     return {isValid: true, wxfData: geoBlock}
   }, //end of function
 
@@ -614,6 +586,79 @@ const provWeatherGov = {
 
     return {isValid: true, polyURL: polyURL}
   }, // end of function
+
+  normalizeData: (rawData) => {
+    const currentDate = new Date()
+    
+    // Group periods by day first
+    const dayPeriods = rawData.properties.periods.reduce((days, period) => {
+      const date = new Date(period.startTime)
+      const dayKey = date.toISOString().split('T')[0]
+      
+      if (!days[dayKey]) {
+        days[dayKey] = {
+          periods: [],
+          high: -Infinity,
+          low: Infinity,
+          date: date
+        }
+      }
+
+      // Add period with null checks
+      days[dayKey].periods.push(new WxPeriod({
+        timeOfDay: period.isDaytime ? 'day' : 'night',
+        startTime: period.startTime || date.toISOString(),
+        endTime: period.endTime || new Date(date.getTime() + 12*60*60*1000).toISOString(),
+        temp: period.temperature || 0,
+        description: period.detailedForecast || "No description available",
+        precip: period.probabilityOfPrecipitation?.value || 0,
+        precipAmount: 0, // weather.gov doesn't provide amount
+        wind: {
+          speed: WxDataNormalizer.extractWindSpeed(period.windSpeed || "0 mph"),
+          gust: WxDataNormalizer.extractGustSpeed(period.detailedForecast || ""),
+          direction: period.windDirection || ""
+        },
+        clouds: 0, // weather.gov doesn't provide cloud coverage
+        visibility: 0 // weather.gov doesn't provide visibility
+      }))
+
+      // Update high/low based on time of day
+      if (period.isDaytime) {
+        days[dayKey].high = Math.max(days[dayKey].high, period.temperature || 0)
+      } else {
+        days[dayKey].low = Math.min(days[dayKey].low, period.temperature || 0)
+      }
+
+      return days
+    }, {})
+
+    // Convert each day's data into WxDay objects
+    return Object.entries(dayPeriods).map(([dateKey, data]) => {
+      // Check each period for bad weather
+      const periodsWithBadWeatherCheck = data.periods.map(period => ({
+        ...period,
+        isBadWeather: WxDataNormalizer.checkForBadWeather(period.conditions.description)
+      }))
+
+      // Get the day name from the date
+      const dayName = data.date.toLocaleDateString('en-US', { weekday: 'long' })
+
+      return new WxDay({
+        date: data.date,
+        dayOfWeek: dayName,
+        highTemp: data.high === -Infinity ? 0 : data.high,
+        lowTemp: data.low === Infinity ? 0 : data.low,
+        description: periodsWithBadWeatherCheck[0]?.description || "No description available",
+        precipProb: periodsWithBadWeatherCheck[0]?.conditions?.precipitation?.probability || 0,
+        precipAmount: 0, // weather.gov doesn't provide amount
+        windSpeed: periodsWithBadWeatherCheck[0]?.conditions?.wind?.speed || 0,
+        windGust: periodsWithBadWeatherCheck[0]?.conditions?.wind?.gust || 0,
+        windDir: periodsWithBadWeatherCheck[0]?.conditions?.wind?.direction || "",
+        periods: periodsWithBadWeatherCheck,
+        isBadWeather: periodsWithBadWeatherCheck.some(period => period.isBadWeather)
+      })
+    })
+  },
 } //end of provWeatherGov export
 
 module.exports = {provWeatherGov}

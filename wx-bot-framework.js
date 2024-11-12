@@ -20,6 +20,7 @@ const natural = require("natural")
 const userManagement = require("./wx-bot-usermgmt")
 const wxBotProviderMap = require("./wxf-providers/wx-bot-provider-map")
 const cfg = require("./wx-bot-config")
+const { WX_DATA_TYPES, WX_PERIOD_RESOLUTION } = require('./wxf-providers/wx-provider-types')
 
 const activeProviderName = wxBotProviderMap.activeProvider.providerName
 
@@ -257,12 +258,12 @@ const evaluateMessage = async (wxChatUser, msg) => {
     // double check for special temp short hand that word compare won't catch
     let special_match =
       lowercaseMsg === "?" ||
-      lowercaseMsg.match("\\?\\<\\s*(\\d+)") ||
-      lowercaseMsg.match("^\\<\\s*(\\d+)") ||
-      lowercaseMsg.match("^\\>\\s*(\\d+)") ||
-      lowercaseMsg.match("\\?\\>\\s*(\\d+)")
+      lowercaseMsg.match("\\?\\<\\s*(\\\d+)") ||
+      lowercaseMsg.match("^\\<\\s*(\\\d+)") ||
+      lowercaseMsg.match("^\\>\\s*(\\\d+)") ||
+      lowercaseMsg.match("\\?\\>\\s*(\\\d+)")
 
-    debugLog("regex <35..." + lowercaseMsg.match("^\\<\\s*(\\d+)"))
+    debugLog("regex <35..." + lowercaseMsg.match("^\\<\\s*(\\\d+)"))
 
     if (special_match) {
       debugLog("found special_match, setting topic")
@@ -787,723 +788,1163 @@ const handleLocationUpdate = async (chat, wxUsers, wxUserId, wxChatUser, qualifi
 const processUserRequest = async (wxData, qualMsg) => {
   logFunctionName()
   debugLog("wxData= " + JSON.stringify(wxData, null, 3) + " qualMsg= " + JSON.stringify(qualMsg, null, 3))
-  let formattedData = []
 
-  switch (qualMsg.msg_subject.toLowerCase()) {
-    case "rain":
-      formattedData = await formatRainData(wxData, qualMsg)
-      break
-    case "wind":
-      formattedData = await formatWindData(wxData, qualMsg)
-      break
-    case "temp":
-      formattedData = await formatTempData(wxData, qualMsg)
-      break
-    case "wxforecasts":
-      formattedData = await formatSearchData(wxData, qualMsg)
-      break
-    case "badweather":
-      formattedData = await formatBadWeatherData(wxData, qualMsg)
-      break
-    case "wxalerts":
-      formattedData = await formatWeatherAlerts(wxData, qualMsg)
-      break
-    default:
-      formattedData.push("I'm sorry, I don't know how to process that type of weather data.")
-  }
+  // Create processor with provider type and resolution
+  const processor = new WxDataProcessor(
+    wxData.providerType, 
+    wxData.periodResolution
+  )
 
+  // Process the request
+  const formattedData = await processor.findThisKindOfWeather(wxData, qualMsg)
   return formattedData
 }
 
-const formatRainData = async (wxData, qualMsg) => {
-  logFunctionName()
-  let formattedData = []
-
-  // Extract the comparison operator and value from qualifiedParameter
-  const match = qualMsg.qualifiedParameter.match(/r([<>])(\d+)/)
-  if (!match) {
-    formattedData.push("Invalid rain parameter format. Please use 'r>X' or 'r<X' where X is a percentage.")
-    return formattedData
+class WxDataProcessor {
+  constructor(providerType, periodResolution) {
+    this.providerType = providerType
+    this.periodResolution = periodResolution
   }
 
-  const [, operator, value] = match
-  const threshold = parseInt(value)
-
-  wxData.wxfPeriod.forEach((period) => {
-    const rainProbability = period.refRainPrecip
-    let meetsCondition = false
-
-    if (operator === ">" && rainProbability > threshold) {
-      meetsCondition = true
-    } else if (operator === "<" && rainProbability < threshold) {
-      meetsCondition = true
+  async findThisKindOfWeather(days, qualMsg) {
+    // days is now array of WxDay objects
+    switch (qualMsg.msg_subject.toLowerCase()) {
+      case "temp":
+        return this.FindByTempFilter(days, qualMsg)
+      case "rain":
+        return this.FindRainWeather(days, qualMsg)  
+      case "wind":
+        return this.FindWindyWeather(days, qualMsg)
+      case "wxforecasts":
+        return this.FilterForecastWeather(days, qualMsg)
+      case "wxalerts":
+        return this.findActiveAlerts(days, qualMsg)
+      case "badweather":
+        return this.FindBadWeatherWords(days, qualMsg)
+      default:
+        return ["Unsupported weather data type"]
     }
-
-    if (meetsCondition) {
-      const formattedString = `${chatTeal(period.refDayName)}: ${chatYellow(`${rainProbability}% chance of rain`)}. ${period.wxfDescr}`
-      formattedData.push(cleanupString(formattedString))
-    }
-  })
-
-  if (formattedData.length === 0) {
-    formattedData.push(`No periods found with rain probability ${operator} ${threshold}%.`)
   }
 
-  return formattedData
-}
 
-const formatWindData = async (wxData, qualMsg) => {
-  logFunctionName()
-  let formattedData = []
-
-  // Extract the comparison operator and value from qualifiedParameter
-  const match = qualMsg.qualifiedParameter.match(/(wmin|wmax|gmin)([<>])(\d+)/)
-  if (!match) {
-    formattedData.push("Invalid wind parameter format. Please use 'wmin>X', 'wmin<X', 'wmax>X', 'wmax<X', or 'gmin>X' where X is in mph.")
-    return formattedData
-  }
-
-  const [, paramType, operator, value] = match
-  const threshold = parseInt(value)
-
-  wxData.wxfPeriod.forEach((period) => {
-    const windSpeed = period.refWindSpeed
-    const gustSpeed = period.refGustSpeedMax
-    let meetsCondition = false
-
-    switch (paramType) {
-      case "wmin":
-        if (operator === ">") {
-          meetsCondition = windSpeed > threshold || gustSpeed > threshold
-        } else if (operator === "<") {
-          meetsCondition = windSpeed < threshold && gustSpeed < threshold
-        }
-        break
-      case "wmax":
-        if (operator === ">") {
-          meetsCondition = windSpeed > threshold || gustSpeed > threshold
-        } else if (operator === "<") {
-          meetsCondition = windSpeed < threshold && gustSpeed < threshold
-        }
-        break
-      case "gmin":
-        if (operator === ">") {
-          meetsCondition = gustSpeed > threshold
-        }
-        break
+  FindByTempFilter(days, qualMsg) {
+    let formattedData = []
+    const match = qualMsg.qualifiedParameter.match(/(hilo|hi|lo)([<>])(\d+)/)
+    if (!match) {
+      formattedData.push("Invalid temperature parameter format.")
+      return formattedData
     }
 
-    if (meetsCondition) {
-      let windInfo = `Wind: ${windSpeed} mph`
-      if (gustSpeed > 0 && gustSpeed !== windSpeed) {
-        windInfo += `, gusts up to ${gustSpeed} mph`
+    const [, tempType, operator, value] = match
+    const threshold = parseInt(value)
+
+    days.forEach(day => {
+      let meetsCondition = false
+      let tempToCheck
+      let periodType
+
+      switch(tempType) {
+        case "hilo":
+          meetsCondition = (operator === ">" && 
+            (day.summary.high > threshold || day.summary.low > threshold)) ||
+            (operator === "<" && 
+            (day.summary.high < threshold || day.summary.low < threshold))
+          break
+        case "hi":
+          tempToCheck = day.summary.high
+          periodType = 'day'
+          meetsCondition = (operator === ">" && tempToCheck > threshold) || 
+                          (operator === "<" && tempToCheck < threshold)
+          break
+        case "lo":
+          tempToCheck = day.summary.low
+          periodType = 'night'
+          meetsCondition = (operator === ">" && tempToCheck > threshold) || 
+                          (operator === "<" && tempToCheck < threshold)
+          break
       }
-      const formattedString = `${chatTeal(period.refDayName)}: ${chatYellow(windInfo)}. ${period.wxfDescr}`
-      formattedData.push(cleanupString(formattedString))
+
+      if (meetsCondition) {
+        // For multi-period providers, we can get the specific period description
+        let description = day.summary.description
+        if (day.periods.length > 0 && periodType) {
+          const period = day.periods.find(p => p.timeOfDay === periodType)
+          if (period) {
+            description = period.conditions.description
+          }
+        }
+
+        const tempInfo = tempType === "hilo" ? 
+          `High: ${day.summary.high}°F, Low: ${day.summary.low}°F` :
+          `${tempType === "hi" ? "High" : "Low"}: ${tempToCheck}°F`
+
+        formattedData.push(cleanupString(
+          `${chatTeal(day.dayOfWeek)}: ${chatYellow(tempInfo)}. ${description}`
+        ))
+      }
+    })
+
+    if (formattedData.length === 0) {
+      formattedData.push(
+        `No days found with ${
+          tempType === "hilo" ? "temperatures" : 
+          tempType === "hi" ? "high temperatures" : 
+          "low temperatures"
+        } ${operator} ${threshold}°F.`
+      )
     }
-  })
 
-  if (formattedData.length === 0) {
-    formattedData.push(`No periods found with ${paramType === "gmin" ? "gust" : "wind"} speeds ${operator} ${threshold} mph.`)
-  }
-
-  return formattedData
-}
-
-const formatTempData = async (wxData, qualMsg) => {
-  logFunctionName()
-  let formattedData = []
-
-  // Extract the comparison operator and value from qualifiedParameter
-  const match = qualMsg.qualifiedParameter.match(/(hilo|hi|lo)([<>])(\d+)/)
-  if (!match) {
-    formattedData.push("Invalid temperature parameter format. Please use 'hilo<>X' or 'hi<>X' or 'lo<>X' where X is a temperature.")
     return formattedData
   }
 
-  const [, tempType, operator, value] = match
-  const threshold = parseInt(value)
-
-  wxData.wxfPeriod.forEach((period) => {
-    const temp = period.wxfTemp
-    let meetsCondition = false
-
-    switch (tempType) {
-      case "hilo":
-        meetsCondition = (operator === ">" && temp > threshold) || (operator === "<" && temp < threshold)
-        break
-      case "hi":
-        meetsCondition = period.wxfIsDaytime && ((operator === ">" && temp > threshold) || (operator === "<" && temp < threshold))
-        break
-      case "lo":
-        meetsCondition = !period.wxfIsDaytime && ((operator === ">" && temp > threshold) || (operator === "<" && temp < threshold))
-        break
+  FilterForecastWeather(days, qualMsg) {
+    if (!qualMsg.qualifiedParameter) {
+      return this.formatUnfilteredForecastData(days)
     }
 
-    if (meetsCondition) {
-      const tempInfo = `${period.wxfIsDaytime ? "High" : "Low"}: ${temp}°F`
-      const formattedString = `${chatTeal(period.refDayName)}: ${chatYellow(tempInfo)}. ${period.wxfDescr}`
-      formattedData.push(cleanupString(formattedString))
+    const params = qualMsg.qualifiedParameter
+    switch (params.action) {
+      case "search":
+        return this.handleSearchCriteria(days, params.searchValue)
+      case "day":
+        return this.formatThisDayForecast(days, params.dayValue)
+      case "nDays":
+        //return this.formatNDaysForecast(days, params.numOfDays)
+        const n = parseInt(params.numOfDays) || 1  // Default to 1 if invalid
+        const maxDays = days.length - 1  // Subtract 1 because we start from tomorrow
+        const daysToShow = Math.min(n, maxDays)  // Don't exceed available days
+        return this.formatUnfilteredForecastData(days.slice(1, daysToShow + 1))
+      case "today":
+        return this.formatUnfilteredForecastData(days.slice(0, 1))
+      case "tomorrow":
+        return this.formatUnfilteredForecastData(days.slice(1, 2))
+      case "tonight":
+        if (this.periodResolution === WX_PERIOD_RESOLUTION.DAILY) {
+          // For daily resolution, use the appropriate day
+          const dayIndex = qualMsg.msg_subject === "tomorrow" ? 1 : 0
+          return this.formatDailyForecast(days[dayIndex], qualMsg.msg_subject)
+        } 
+        else if (this.periodResolution === WX_PERIOD_RESOLUTION.TWELVE_HOUR) {
+          // For 12-hour resolution, find the correct period
+          const periods = days[0].periods
+          switch(qualMsg.msg_subject) {
+            case "today":
+              return this.formatTodayForecast(periods.find(p => p.timeOfDay === "day"))
+            case "tonight":
+              return this.formatTonightForecast(periods.find(p => p.timeOfDay === "night"))
+            case "tomorrow":
+              return this.formatTomorrowForecast(
+                periods.find(p => p.timeOfDay === "day"),
+                periods.find(p => p.timeOfDay === "night")
+              )
+          }
+        }
+        else if (this.periodResolution === WX_PERIOD_RESOLUTION.HOURLY) {
+          // For hourly resolution, group relevant hours
+          const currentHour = new Date().getHours()
+          const periods = days[0].periods
+          switch(qualMsg.msg_subject) {
+            case "today":
+              return this.formatHourlyForecast(periods.filter(p => {
+                          const hour = new Date(p.startTime).getHours()
+                          return hour >= currentHour && hour < 18}),"Today")
+            case "tonight":
+              return this.formatHourlyForecast(periods.filter(p => {
+                  const hour = new Date(p.startTime).getHours()
+                          return hour >= 18 || hour < 6}),"Tonight")
+            case "tomorrow":
+              return this.formatHourlyForecast(periods.filter(p => {
+                  const hour = new Date(p.startTime).getHours()
+                          return hour >= 6 && hour < 18}),"Tomorrow")
+          }
+        }
+      default:
+        return ["Invalid forecast request"]
     }
-  })
+  }
 
-  if (formattedData.length === 0) {
-    formattedData.push(
-      `No periods found with ${
-        tempType === "hilo" ? "temperatures" : tempType === "hi" ? "high temperatures" : "low temperatures"
-      } ${operator} ${threshold}°F.`
+  formatTodayForecast(day) {
+    console.log("WxDataProcessor formatTodayForecast input:", { day: JSON.stringify(day) })  // Add debug logging
+    const formattedData = []
+    
+    // Add the daily summary if no periods
+    if (!day.periods.length) {
+      formattedData.push(this.formatDailyTempsSummaryStr(day))
+      return formattedData
+    }
+
+    // For multi-period providers, get all remaining periods for today
+    const now = new Date()
+    const todayPeriods = day.periods.filter(period => 
+      new Date(period.startTime) >= now
+    )
+
+    todayPeriods.forEach(period => {
+      formattedData.push(this.format12hrTempsSummaryStr(day.dayOfWeek, period))
+    })
+
+    return formattedData.length ? formattedData : ["No more forecasts available for today"]
+  }
+
+  formatTonightForecast(day) {
+    const formattedData = []
+    
+    // For daily providers, just show the low
+    if (!day.periods.length) {
+      const nightSummary = `${chatTeal(day.dayOfWeek)} Night: Low of ${
+        chatBlue(`${day.summary.low}°F`)
+      }. ${day.summary.description}`
+      formattedData.push(cleanupString(nightSummary))
+      return formattedData
+    }
+
+    // For multi-period providers, find the next night period
+    const now = new Date()
+    const nightPeriod = day.periods.find(period => 
+      period.timeOfDay === 'night' && new Date(period.startTime) >= now
+    )
+
+    if (nightPeriod) {
+      formattedData.push(this.format12hrTempsSummaryStr(day.dayOfWeek, nightPeriod))
+    } else {
+      // If no night period found in current day, check next day
+      formattedData.push(`No more night forecasts available for ${day.dayOfWeek}`)
+    }
+
+    return formattedData
+  }
+
+  formatTomorrowForecast(today, tomorrow) {
+    const formattedData = []
+
+    // For daily providers
+    if (!tomorrow.periods.length) {
+      formattedData.push(this.formatDailyTempsSummaryStr(tomorrow))
+      return formattedData
+    }
+
+    // For multi-period providers, get all periods for tomorrow
+    tomorrow.periods.forEach(period => {
+      formattedData.push(this.format12hrTempsSummaryStr(tomorrow.dayOfWeek, period))
+    })
+
+    return formattedData
+  }
+
+  formatNDaysForecast(days, numDays) {
+    const formattedData = []
+    const endIndex = Math.min(numDays, days.length)
+
+    for (let i = 0; i < endIndex; i++) {
+      const day = days[i]
+      
+      if (!day.periods.length) {
+        // Daily provider
+        formattedData.push(this.formatDailyTempsSummaryStr(day))
+      } else {
+        // Multi-period provider
+        day.periods.forEach(period => {
+          formattedData.push(this.format12hrTempsSummaryStr(day.dayOfWeek, period))
+        })
+      }
+    }
+
+    return formattedData
+  }
+
+
+  async formatDailyForecast(day, timeframe) {
+    if (!day) return ["No forecast data available for " + timeframe]
+
+    const tempDisplay = day.temperature > cfg.appConfig.tempHot ? 
+      chatYellow(`${day.highTemp}°F`) : 
+      day.temperature < cfg.appConfig.tempCold ? 
+        chatBlue(`${day.highTemp}°F`) : 
+        `${day.highTemp}°F`
+
+    const windInfo = day.windSpeed > 0 ? 
+      ` Wind ${day.windDir} ${day.windSpeed}${day.windGust > 0 ? ` gusting to ${day.windGust}` : ''} mph.` : 
+      ''
+    
+    const precipInfo = day.precipProb > 0 ? 
+      ` Chance of precipitation ${day.precipProb}%.` : 
+      ''
+
+    return [cleanupString(
+      `${chatTeal(timeframe.charAt(0).toUpperCase() + timeframe.slice(1))}: ` +
+      `High ${tempDisplay}. ` +
+      `${day.description}${windInfo}${precipInfo}`
+    )]
+  }
+
+  async formatHourlyForecast(periods, timeframe) {
+    if (!periods || periods.length === 0) {
+      return ["No forecast data available for " + timeframe]
+    }
+
+    let formattedData = []
+    let currentTemp = null
+    let maxTemp = -Infinity
+    let minTemp = Infinity
+    let conditions = new Set()
+    let maxWind = 0
+    let maxGust = 0
+    let precipProb = 0
+
+    // Analyze all periods
+    periods.forEach(period => {
+      if (!currentTemp) currentTemp = period.temperature
+      maxTemp = Math.max(maxTemp, period.temperature)
+      minTemp = Math.min(minTemp, period.temperature)
+      conditions.add(period.conditions.description)
+      maxWind = Math.max(maxWind, period.conditions.wind.speed)
+      maxGust = Math.max(maxGust, period.conditions.wind.gust)
+      precipProb = Math.max(precipProb, period.conditions.precipitation.probability)
+    })
+
+    // Format temperature display
+    const tempDisplay = (temp) => {
+      if (temp > cfg.appConfig.tempHot) return chatYellow(`${temp}°F`)
+      if (temp < cfg.appConfig.tempCold) return chatBlue(`${temp}°F`)
+      return `${temp}°F`
+    }
+
+    // Build the forecast string
+    let forecastStr = `${chatTeal(timeframe)}: `
+    
+    // Temperature info
+    if (maxTemp === minTemp) {
+      forecastStr += `Temperature steady around ${tempDisplay(maxTemp)}. `
+    } else {
+      forecastStr += `Temperature ranging from ${tempDisplay(minTemp)} to ${tempDisplay(maxTemp)}. `
+    }
+
+    // Conditions
+    forecastStr += Array.from(conditions).join('. ') + '. '
+
+    // Wind info
+    if (maxWind > 0) {
+      forecastStr += `Winds up to ${maxWind}${maxGust > 0 ? ` gusting to ${maxGust}` : ''} mph. `
+    }
+
+    // Precipitation probability
+    if (precipProb > 0) {
+      forecastStr += `Chance of precipitation ${precipProb}%.`
+    }
+
+    formattedData.push(cleanupString(forecastStr))
+    return formattedData
+  }
+
+
+  formatDailyTempsSummaryStr(day) {
+    return cleanupString(
+      `${chatTeal(day.dayOfWeek)}: High ${
+        day.summary.high > cfg.appConfig.tempHot ? 
+          chatYellow(`${day.summary.high}°F`) : 
+          `${day.summary.high}°F`
+      }, Low ${
+        day.summary.low < cfg.appConfig.tempCold ? 
+          chatBlue(`${day.summary.low}°F`) : 
+          `${day.summary.low}°F`
+      }. ${day.summary.description}`
     )
   }
 
-  return formattedData
-}
+  format12hrTempsSummaryStr(dayName, period) {
+    console.log("WxDataProcessor formatPeriod input:", { dayName, period: JSON.stringify(period) })  // Add debug logging
+    const timePrefix = period.timeOfDay === 'night' ? 'Night' : ''
+    const periodName = timePrefix ? `${dayName} ${timePrefix}` : dayName
+    
+    return cleanupString(
+      `${chatTeal(periodName)}: ${
+        period.temperature > cfg.appConfig.tempHot ? 
+          chatYellow(`${period.temperature}°F`) : 
+          period.temperature < cfg.appConfig.tempCold ? 
+            chatBlue(`${period.temperature}°F`) : 
+            `${period.temperature}°F`
+      }. ${period.conditions.description}`
+    )
+  }
 
-const formatBadWeatherData = async (wxData, qualMsg) => {
-  logFunctionName()
-  let formattedData = []
+  FindRainWeather(days, qualMsg) {
+    console.log('DEBUG: FindRainWeather input:', {
+      daysCount: days.length,
+      firstDayStructure: days[0],
+      qualMsg
+    })
+    let formattedData = []
 
-  // Assuming qualMsg.qualifiedParameter contains the array of words to highlight
-  const wordsToHighlight = qualMsg.qualifiedParameter || []
+    // For unqualified requests (just "rain"), use summary data
+    if (!qualMsg.qualifiedParameter) {
+      days.forEach(day => {
+        if (day.summary.precipitation.probability > 0) {
+          formattedData.push(cleanupString(
+            `${chatTeal(day.dayOfWeek)}: ${chatYellow(`${day.summary.precipitation.probability}% chance of rain`)}. ${day.summary.description}`
+          ))
+        }
+      })
+      
+      if (formattedData.length === 0) {
+        formattedData.push("No rain expected in the forecast period.")
+      }
+      return formattedData
+    }
 
-  for (const period of wxData.wxfPeriod) {
-    if (period.refBadFlag === true) {
-      // Format the period
-      let formattedPeriod = await formatPeriod(period)
+    // For qualified requests (e.g., "r>30"), use appropriate data source
+    const match = qualMsg.qualifiedParameter.match(/r([<>])(\d+)/)
+    if (!match) {
+      formattedData.push("Invalid rain parameter format.")
+      return formattedData
+    }
 
-      // Highlight specific words in the description
-      wordsToHighlight.forEach((word) => {
-        const regex = new RegExp(`\\b${word}\\b`, "gi")
-        formattedPeriod = formattedPeriod.replace(regex, (match) => chatYellow(match))
+    const [, operator, value] = match
+    const threshold = parseInt(value)
+
+    // For DAILY resolution providers, use summary data
+    if (this.periodResolution === WX_PERIOD_RESOLUTION.DAILY) {
+      days.forEach(day => {
+        const rainProb = day.summary.precipitation.probability
+        const meetsCondition = (operator === ">" && rainProb > threshold) || 
+                             (operator === "<" && rainProb < threshold)
+
+        if (meetsCondition) {
+          formattedData.push(cleanupString(
+            `${chatTeal(day.dayOfWeek)}: ${chatYellow(`${rainProb}% chance of rain`)}. ${day.summary.description}`
+          ))
+        }
+      })
+    }
+    // For TWELVE_HOUR resolution providers, use periods data
+    else if (this.periodResolution === WX_PERIOD_RESOLUTION.TWELVE_HOUR) {
+      days.forEach(day => {
+        day.periods.forEach(period => {
+          const rainProb = period.conditions.precipitation.probability
+          const meetsCondition = (operator === ">" && rainProb > threshold) || 
+                               (operator === "<" && rainProb < threshold)
+
+          if (meetsCondition) {
+            const timePrefix = period.timeOfDay === 'night' ? 'Night' : ''
+            const periodName = timePrefix ? `${day.dayOfWeek} ${timePrefix}` : day.dayOfWeek
+            formattedData.push(cleanupString(
+              `${chatTeal(periodName)}: ${chatYellow(`${rainProb}% chance of rain`)}. ${period.conditions.description}`
+            ))
+          }
+        })
+      })
+    }
+
+    if (formattedData.length === 0) {
+      formattedData.push(`No periods found with rain probability ${operator} ${threshold}%.`)
+    }
+
+    return formattedData
+  }
+
+  FindWindyWeather(days, qualMsg) {
+    let formattedData = []
+    const match = qualMsg.qualifiedParameter.match(/(wmin|wmax|gmin)([<>])(\d+)/)
+    if (!match) {
+      formattedData.push("Invalid wind parameter format.")
+      return formattedData
+    }
+
+    const [, paramType, operator, value] = match
+    const threshold = parseInt(value)
+
+    days.forEach(day => {
+      let meetsCondition = false
+      const windSpeed = day.summary.wind.avgSpeed
+      const gustSpeed = day.summary.wind.maxGust
+
+      switch (paramType) {
+        case "wmin":
+        case "wmax":
+          meetsCondition = (operator === ">" && (windSpeed > threshold || gustSpeed > threshold)) ||
+                          (operator === "<" && (windSpeed < threshold && gustSpeed < threshold))
+          break
+        case "gmin":
+          meetsCondition = (operator === ">" && gustSpeed > threshold)
+          break
+      }
+
+      if (meetsCondition) {
+        let windInfo = `Wind: ${windSpeed} mph`
+        if (gustSpeed > 0 && gustSpeed !== windSpeed) {
+          windInfo += `, gusts up to ${gustSpeed} mph`
+        }
+        formattedData.push(cleanupString(
+          `${chatTeal(day.dayOfWeek)}: ${chatYellow(windInfo)}. ${day.summary.description}`
+        ))
+      }
+
+      // Check individual periods if available
+      if (day.periods && day.periods.length > 0) {
+        day.periods.forEach(period => {
+          const periodWind = period.conditions.wind
+          meetsCondition = false
+          
+          switch (paramType) {
+            case "wmin":
+            case "wmax":
+              meetsCondition = (operator === ">" && 
+                (periodWind.speed > threshold || periodWind.gust > threshold)) ||
+                (operator === "<" && 
+                (periodWind.speed < threshold && periodWind.gust < threshold))
+              break
+            case "gmin":
+              meetsCondition = (operator === ">" && periodWind.gust > threshold)
+              break
+          }
+
+          if (meetsCondition) {
+            const timePrefix = period.timeOfDay === 'night' ? 'Night' : ''
+            const periodName = timePrefix ? `${day.dayOfWeek} ${timePrefix}` : day.dayOfWeek
+            let windInfo = `Wind: ${periodWind.speed} mph`
+            if (periodWind.gust > 0) {
+              windInfo += `, gusts up to ${periodWind.gust} mph`
+            }
+            formattedData.push(cleanupString(
+              `${chatTeal(periodName)}: ${chatYellow(windInfo)}. ${period.conditions.description}`
+            ))
+          }
+        })
+      }
+    })
+
+    if (formattedData.length === 0) {
+      formattedData.push(`No periods found with ${paramType === "gmin" ? "gust" : "wind"} speeds ${operator} ${threshold} mph.`)
+    }
+
+    return formattedData
+  }
+
+  FindBadWeatherWords(days, qualMsg) {
+    let formattedData = []
+    let loopData = []
+
+    // For DAILY resolution providers, use summary data
+    if (this.periodResolution === WX_PERIOD_RESOLUTION.DAILY) {
+      days.forEach(day => {
+        if (day.flags.isBadWeather) {
+          loopData.push(this.formatDailyTempsSummaryStr(day))   //debug--wrong name
+        }
+      })
+      if (loopData.length > 0) { formattedData = loopData}
+    }
+    // For TWELVE_HOUR resolution providers, use periods data
+    else if (this.periodResolution === WX_PERIOD_RESOLUTION.TWELVE_HOUR) {
+      days.forEach(day => {
+          // Add period-specific bad weather if available
+        day.periods.forEach(period => {
+          if (period.isBadWeather || 
+            period.conditions.description.toLowerCase().includes('severe') ||
+              period.conditions.description.toLowerCase().includes('warning')) {
+                const timePrefix = period.timeOfDay === 'night' ? 'Night' : ''
+                const periodName = timePrefix ? `${day.dayOfWeek} ${timePrefix}` : day.dayOfWeek
+                console.log('DEBUG: FindBadWeatherWords periodName:' +periodName + ', ' + JSON.stringify(period))
+                loopData.push(this.formatPeriod(periodName, period))
+              }
+            })
+          
+        })
+        if (loopData.length > 0) { formattedData = loopData}
+      }
+
+    if (formattedData.length === 0) {
+      formattedData.push("No periods with bad weather found in the forecast.")
+    }
+
+    return formattedData
+  }
+
+  findActiveAlerts(wxaData, qualMsg) {
+    logFunctionName()
+    let formattedData = []
+
+    // Iterate over each alert in wxaData
+    wxaData.forEach((alert) => {
+      // Check if this alert should be reported
+      if (alert.doReport === true) {
+        // If so, push its formatted message to formattedData
+        formattedData.push(alert.formatted)
+      }
+    })
+
+    // If no alerts were added to formattedData, add the "Good news" message
+    if (formattedData.length === 0) {
+      formattedData.push("Good news! No active location alerts found.")
+    }
+
+    return formattedData
+  }
+
+
+  formatWxPeriod(period) {
+    return cleanupString(`${chatTeal(period.refDayName)}: ${period.wxfDescr}`)
+  }
+
+
+  formatThisDayForecast(days, dayValue) {
+    const formattedData = []
+    const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
+    const searchDay = dayValue.toLowerCase()
+    const isWeekend = searchDay === "wknd"
+    
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    for (const day of days) {
+      const forecastDate = new Date(day.date)
+      forecastDate.setHours(0, 0, 0, 0)
+
+      // Get the raw day name without any formatting
+      const rawDayName = dayNames[forecastDate.getDay()]
+
+      console.log('Debug - Day Names:', {
+        searchDay,
+        rawDayName,
+        formattedDayName: day.dayOfWeek
       })
 
-      formattedData.push(formattedPeriod)
-    }
-  }
+      const dayMatches = isWeekend ? 
+        ["saturday", "sunday"].includes(rawDayName) :
+        rawDayName.startsWith(searchDay)
+      
+      if (dayMatches) {
+        // Calculate end of current week (next Sunday)
+        const endOfCurrentWeek = new Date(today)
+        endOfCurrentWeek.setDate(today.getDate() + (7 - today.getDay()))
+        endOfCurrentWeek.setHours(23, 59, 59, 999)
 
-  if (formattedData.length === 0) {
-    formattedData.push("No periods with bad weather found in the forecast.")
-  }
+        // Check if this is the first occurrence after today
+        const isNextOccurrence = forecastDate > today && (
+          // Either the date is within current week
+          forecastDate <= endOfCurrentWeek ||
+          // Or it's the first occurrence of this day after today
+          !formattedData.length
+        )
 
-  return formattedData
-}
+        console.log('Debug - Occurrence Check:', {
+          dayOfWeek: day.dayOfWeek,
+          isAfterToday: forecastDate > today,
+          isWithinCurrentWeek: forecastDate <= endOfCurrentWeek,
+          isNextOccurrence,
+          dayName: day.dayOfWeek
+        })
 
-const formatWeatherAlerts = async (wxaData, qualMsg) => {
-  logFunctionName()
-  let formattedData = []
+        if (isNextOccurrence) {
+          // For DAILY resolution providers, use summary
+          if (this.periodResolution === WX_PERIOD_RESOLUTION.DAILY) {
+            formattedData.push(this.formatDailyTempsSummaryStr(day))
+          }
+          // For MULTI_PERIOD providers, use periods
+          else if (this.periodResolution === WX_PERIOD_RESOLUTION.TWELVE_HOUR) {
+            // Sort periods to ensure 'day' comes before 'night'
+            const sortedPeriods = [...day.periods].sort((a, b) => 
+              a.timeOfDay === 'night' ? 1 : -1
+            )
+            
+            sortedPeriods.forEach(period => {
+              const timePrefix = period.timeOfDay === 'night' ? 'Night' : ''
+              const periodName = timePrefix ? `${day.dayOfWeek} ${timePrefix}` : day.dayOfWeek
+              formattedData.push(cleanupString(
+                `${chatTeal(periodName)}: ${period.conditions.description}`
+              ))
+            })
+          }
+          // For HOURLY providers, group by day parts
+          else if (this.periodResolution === WX_PERIOD_RESOLUTION.HOURLY) {
+            // Group hours into day parts (morning, afternoon, evening, night)
+            const dayParts = {
+              morning: day.periods.filter(p => {
+                const hour = new Date(p.startTime).getHours()
+                return hour >= 6 && hour < 12
+              }),
+              afternoon: day.periods.filter(p => {
+                const hour = new Date(p.startTime).getHours()
+                return hour >= 12 && hour < 18
+              }),
+              evening: day.periods.filter(p => {
+                const hour = new Date(p.startTime).getHours()
+                return hour >= 18 && hour < 24
+              }),
+              night: day.periods.filter(p => {
+                const hour = new Date(p.startTime).getHours()
+                return hour >= 0 && hour < 6
+              })
+            }
 
-  // Iterate over each alert in wxaData
-  wxaData.forEach((alert) => {
-    // Check if this alert should be reported
-    if (alert.doReport === true) {
-      // If so, push its formatted message to formattedData
-      formattedData.push(alert.formatted)
-    }
-  })
-
-  // If no alerts were added to formattedData, add the "Good news" message
-  if (formattedData.length === 0) {
-    formattedData.push("Good news! No active location alerts found.")
-  }
-
-  return formattedData
-}
-
-const formatSearchData = async (wxData, qualMsg) => {
-  logFunctionName()
-  let formattedData = []
-
-  // Parse the qualifiedParameter as a JSON object
-  let params
-  if (typeof qualMsg.qualifiedParameter === "string") {
-    try {
-      params = JSON.parse(qualMsg.qualifiedParameter)
-    } catch (error) {
-      console.error("Error parsing qualifiedParameter:", error)
-      params = {} // Set a default empty object
-    }
-  } else if (typeof qualMsg.qualifiedParameter === "object" && qualMsg.qualifiedParameter !== null) {
-    params = qualMsg.qualifiedParameter
-  } else {
-    console.error("Invalid qualifiedParameter type:", typeof qualMsg.qualifiedParameter)
-    params = {} // Set a default empty object
-  }
-
-  // Now you can use params safely
-  debugLog("Parsed params:", params)
-
-  switch (params.action) {
-    case "nDays":
-      formattedData = await handleNumOfDaysCriteria(wxData, params.numOfDays)
-      break
-    case "day":
-      formattedData = await handleDayCriteria(wxData, params.dayValue)
-      break
-    case "search":
-      formattedData = await handleSearchCriteria(wxData, params.searchValue)
-      break
-    case "today":
-      // Always include the first period (index 0)
-      formattedData.push(await formatPeriod(wxData.wxfPeriod[0]))
-
-      // Check if there's a second period and if it's nighttime
-      if (wxData.wxfPeriod.length > 1 && !wxData.wxfPeriod[1].wxfIsDaytime) {
-        formattedData.push(await formatPeriod(wxData.wxfPeriod[1]))
-      }
-      break
-    case "tonight":
-      let tonightPeriod
-      if (!wxData.wxfPeriod[0].wxfIsDaytime) {
-        // If the first period is nighttime, use it
-        tonightPeriod = wxData.wxfPeriod[0]
-      } else if (wxData.wxfPeriod.length > 1 && !wxData.wxfPeriod[1].wxfIsDaytime) {
-        // If the second period exists and is nighttime, use it
-        tonightPeriod = wxData.wxfPeriod[1]
-      }
-
-      if (tonightPeriod) {
-        formattedData.push(await formatPeriod(tonightPeriod))
-      } else {
-        formattedData.push("No nighttime forecast available for tonight.")
-      }
-      break
-    case "tomorrow":
-      // Get the next day period and the following night period
-      const tomorrowDayIndex = wxData.wxfPeriod.findIndex((period, index) => index > 0 && period.wxfIsDaytime)
-      if (tomorrowDayIndex !== -1) {
-        formattedData.push(await formatPeriod(wxData.wxfPeriod[tomorrowDayIndex]))
-        if (tomorrowDayIndex + 1 < wxData.wxfPeriod.length) {
-          formattedData.push(await formatPeriod(wxData.wxfPeriod[tomorrowDayIndex + 1]))
+            // Format each day part that has data
+            Object.entries(dayParts).forEach(([partName, periods]) => {
+              if (periods.length > 0) {
+                formattedData.push(this.formatHourlyForecast(
+                  periods,
+                  `${day.dayOfWeek} ${partName.charAt(0).toUpperCase() + partName.slice(1)}`
+                ))
+              }
+            })
+          }
+          // Only break if not weekend, so we can get both Sat and Sun
+          if (!isWeekend) {
+            break
+          }
         }
       }
-      break
-    default:
-      formattedData.push("Invalid search criteria")
-  }
-
-  if (formattedData.length === 0) {
-    formattedData.push("No matching forecast periods found.")
-  }
-
-  return formattedData
-}
-
-// Helper function to format a single period
-const formatPeriod = async (period) => {
-  return await cleanupString(`${chatTeal(period.refDayName)}: ${period.wxfDescr}`)
-}
-
-const handleNumOfDaysCriteria = async (wxData, numOfDays) => {
-  logFunctionName()
-  const startIndex = 0
-  let endIndex = Math.min(startIndex + numOfDays * 2, wxData.wxfPeriod.length)
-
-  // Check if the last period is a daytime period
-  if (endIndex < wxData.wxfPeriod.length && wxData.wxfPeriod[endIndex - 1].wxfIsDaytime) {
-    // If so, include the next period (night period)
-    endIndex = Math.min(endIndex + 1, wxData.wxfPeriod.length)
-  }
-
-  const selectedPeriods = wxData.wxfPeriod.slice(startIndex, endIndex)
-
-  const formattedData = []
-  for (const period of selectedPeriods) {
-    formattedData.push(await formatPeriod(period))
-  }
-
-  return formattedData
-}
-
-const handleDayCriteria = async (wxData, dayValue) => {
-  logFunctionName()
-  const filteredPeriods = wxData.wxfPeriod.filter((period) => {
-    if (dayValue.toLowerCase() === "wknd") {
-      return ["Saturday", "Sunday"].includes(period.refDOW)
-    } else {
-      return period.refDOW.toLowerCase().startsWith(dayValue.toLowerCase()) || period.refDOW_int.toString() === dayValue
     }
-  })
 
-  const formattedData = []
-  for (const period of filteredPeriods) {
-    formattedData.push(await formatPeriod(period))
+    if (formattedData.length === 0) {
+      formattedData.push(`No forecast found for ${isWeekend ? "weekend" : dayValue}`)
+    }
+
+    return formattedData.flat() // Flatten in case of nested arrays from hourly forecasts
   }
 
-  return formattedData
-}
+  handleSearchCriteria(days, searchValue) {
+    const formattedData = []
+    const searchTerm = searchValue.toLowerCase()
 
-const handleSearchCriteria = async (wxData, searchValue) => {
-  logFunctionName()
+    days.forEach(day => {
+      // For DAILY resolution, check summary
+      if (this.periodResolution === WX_PERIOD_RESOLUTION.DAILY) {
+        if (day.summary.description.toLowerCase().includes(searchTerm)) {
+          formattedData.push(cleanupString(
+            `${chatTeal(day.dayOfWeek)}: ${day.summary.description}`
+          ))
+        }
+      }
+      // For MULTI_PERIOD, check each period
+      else if (this.periodResolution === WX_PERIOD_RESOLUTION.TWELVE_HOUR) {
+        day.periods.forEach(period => {
+          if (period.conditions.description.toLowerCase().includes(searchTerm)) {
+            const timePrefix = period.timeOfDay === 'night' ? 'Night' : ''
+            const periodName = timePrefix ? `${day.dayOfWeek} ${timePrefix}` : day.dayOfWeek
+            formattedData.push(cleanupString(
+              `${chatTeal(periodName)}: ${period.conditions.description}`
+            ))
+          }
+        })
+      }
+    })
 
-  const searchTerm = searchValue.toLowerCase()
-  const filteredPeriods = wxData.wxfPeriod.filter((period) => period.wxfDescr.toLowerCase().includes(searchTerm))
+    if (formattedData.length === 0) {
+      formattedData.push(`No forecast periods found containing "${searchValue}"`)
+    }
 
-  const formattedData = []
-  for (const period of filteredPeriods) {
-    formattedData.push(await formatPeriod(period))
+    return formattedData
   }
 
-  return formattedData
-}
+  formatUnfilteredTempData(days) {
+    let formattedData = []
 
-const formatUnfilteredTempData = async (wxData) => {
-  let formattedData = []
-  let currentDay = null
-
-  for (let i = 0; i < wxData.wxfPeriod.length; i++) {
-    const period = wxData.wxfPeriod[i]
-
-    if (period.wxfIsDaytime) {
-      currentDay = {
-        name: period.refDayName,
-        highTemp: period.wxfTemp,
-        lowTemp: null,
-      }
-
-      // Look ahead for the nighttime temperature
-      if (i + 1 < wxData.wxfPeriod.length && !wxData.wxfPeriod[i + 1].wxfIsDaytime) {
-        currentDay.lowTemp = wxData.wxfPeriod[i + 1].wxfTemp
-      }
-
-      // Format the string with color coding
-      let formattedString = `${chatTeal(currentDay.name)} (hi: `
+    days.forEach(day => {
+      // Format string with color coding
+      let formattedString = `${chatTeal(day.dayOfWeek)} (hi: `
 
       // Add color to high temperature if it exceeds tempHot
-      if (currentDay.highTemp > cfg.appConfig.tempHot) {
-        formattedString += chatYellow(`${currentDay.highTemp}°`)
+      if (day.summary.high > cfg.appConfig.tempHot) {
+        formattedString += chatYellow(`${day.summary.high}°`)
       } else {
-        formattedString += `${currentDay.highTemp}°`
+        formattedString += `${day.summary.high}°`
       }
 
-      if (currentDay.lowTemp !== null) {
-        formattedString += `, night: `
-        // Add color to low temperature if it's below tempCold
-        if (currentDay.lowTemp < cfg.appConfig.tempCold) {
-          formattedString += chatBlue(`${currentDay.lowTemp}°`)
-        } else {
-          formattedString += `${currentDay.lowTemp}°`
-        }
+      formattedString += `, night: `
+      
+      // Add color to low temperature if it's below tempCold
+      if (day.summary.low < cfg.appConfig.tempCold) {
+        formattedString += chatBlue(`${day.summary.low}°`)
+      } else {
+        formattedString += `${day.summary.low}°`
       }
+      
       formattedString += ")"
 
       formattedData.push(cleanupString(formattedString))
-    }
+    })
+
+    return formattedData
   }
 
-  return formattedData
+  formatUnfilteredForecastData(days) {
+    let formattedData = []
+
+    days.forEach(day => {
+      // For DAILY resolution providers, use summary
+      if (this.periodResolution === WX_PERIOD_RESOLUTION.DAILY) {
+        formattedData.push(cleanupString(
+          `${chatTeal(day.dayOfWeek)}: ${day.summary.description}`
+        ))
+      }
+      // For MULTI_PERIOD providers, use periods
+      else if (this.periodResolution === WX_PERIOD_RESOLUTION.TWELVE_HOUR) {
+        // Sort periods to ensure 'day' comes before 'night'
+        const sortedPeriods = [...day.periods].sort((a, b) => 
+          a.timeOfDay === 'night' ? 1 : -1
+        )
+        
+        sortedPeriods.forEach(period => {
+          const timePrefix = period.timeOfDay === 'night' ? 'Night' : ''
+          const periodName = timePrefix ? `${day.dayOfWeek} ${timePrefix}` : day.dayOfWeek
+          formattedData.push(cleanupString(
+            `${chatTeal(periodName)}: ${period.conditions.description}`
+          ))
+        })
+      }
+      // For HOURLY providers, group by day parts
+      else if (this.periodResolution === WX_PERIOD_RESOLUTION.HOURLY) {
+        const dayParts = {
+          morning: day.periods.filter(p => {
+            const hour = new Date(p.startTime).getHours()
+            return hour >= 6 && hour < 12
+          }),
+          afternoon: day.periods.filter(p => {
+            const hour = new Date(p.startTime).getHours()
+            return hour >= 12 && hour < 18
+          }),
+          evening: day.periods.filter(p => {
+            const hour = new Date(p.startTime).getHours()
+            return hour >= 18 && hour < 24
+          }),
+          night: day.periods.filter(p => {
+            const hour = new Date(p.startTime).getHours()
+            return hour >= 0 && hour < 6
+          })
+        }
+
+        Object.entries(dayParts).forEach(([partName, periods]) => {
+          if (periods.length > 0) {
+            formattedData.push(this.formatHourlyForecast(
+              periods,
+              `${day.dayOfWeek} ${partName.charAt(0).toUpperCase() + partName.slice(1)}`
+            ))
+          }
+        })
+      }
+    })
+
+    return formattedData.flat()
+  }
+
 }
 
-const formatUnfilteredForecastData = async (wxData) => {
-  logFunctionName()
+  async function handleWeatherAlerts(chat, wxChatUser, qualified_msg) {
+    logFunctionName()
+    // Handle weather alerts requests
+    if (qualified_msg.msg_subject.toLowerCase() === "wxalerts" && qualified_msg.isValid) {
+      const wxaUserData = await wxBotProviderMap.activeProvider.getwxAlertsData(wxChatUser)
 
-  let formattedData = []
+      if (wxaUserData.isValid) {
+        let formattedResponse = []
 
-  for (let i = 0; i < wxData.wxfPeriod.length; i++) {
-    const period = wxData.wxfPeriod[i]
+        // Default formatting for alerts
+        debugLog("Default formatting for alerts")
+        formattedResponse = await processUserRequest(wxaUserData.wxaData, qualified_msg)
 
-    // Format the string
-    let formattedString = `${chatTeal(period.refDayName)}: ${period.wxfDescr}`
-    formattedData.push(cleanupString(formattedString))
-  }
+        preMsg =
+          "Weather for " +
+          chatTeal(wxChatUser.location.label) +
+          (wxChatUser.location.label !== wxChatUser.location.value ? "(" + wxChatUser.location.value + ")" : "")
 
-  return formattedData
-} // end of formatUnfilteredForecastData
+        await sendChats(chat, wxChatUser, formattedResponse, cleanupString(preMsg))
 
-const handleWeatherAlerts = async (chat, wxChatUser, qualified_msg) => {
-  logFunctionName()
-  // Handle weather alerts requests
-  if (qualified_msg.msg_subject.toLowerCase() === "wxalerts" && qualified_msg.isValid) {
-    const wxaUserData = await wxBotProviderMap.activeProvider.getwxAlertsData(wxChatUser)
-
-    if (wxaUserData.isValid) {
-      let formattedResponse = []
-
-      // Default formatting for alerts
-      debugLog("Default formatting for alerts")
-      formattedResponse = await processUserRequest(wxaUserData.wxaData, qualified_msg)
-
-      preMsg =
-        "Weather for " +
-        chatTeal(wxChatUser.location.label) +
-        (wxChatUser.location.label !== wxChatUser.location.value ? "(" + wxChatUser.location.value + ")" : "")
-
-      await sendChats(chat, wxChatUser, formattedResponse, cleanupString(preMsg))
-
-      // provider returned invalid dataset for some reason
-    } else {
-      preMsg = `Your current location is set to: Label=${wxChatUser.location.label} (Location=${wxChatUser.location.value})`
-      await sendMessage(chat, wxChatUser, "I'm sorry, I couldn't retrieve the weather alert data for your location.", preMsg)
-    }
-  } //end of weather alerts related activity
-  return
-} //end of handleWeatherAlerts
-
-const handleWeatherForecast = async (chat, wxChatUser, qualified_msg) => {
-  logFunctionName()
-  // Handle weather forecast requests
-  if (["temp", "rain", "wind", "badweather", "wxforecasts"].includes(qualified_msg.msg_subject.toLowerCase()) && qualified_msg.isValid) {
-    const userLocation = wxChatUser.location
-
-    if (!userLocation) {
-      await sendMessage(chat, wxChatUser, "Please set your location first before requesting weather information.")
-      return //exits switch and exits function
-    }
-
-    //const wxfUserData = await wxBotProviderMap.activeProvider[`get${qualified_msg.msg_subject.charAt(0).toUpperCase() + qualified_msg.msg_subject.slice(1)}Data`](wxChatUser, qualified_msg.qualifiedParameter);
-    const wxfUserData = await wxBotProviderMap.activeProvider.getProvForecastData(wxChatUser)
-
-    if (wxfUserData.isValid) {
-      let formattedResponse = []
-      // New logic block for formatting temp and wxforecasts data
-      if (
-        (qualified_msg.msg_subject.toLowerCase() === "temp" || qualified_msg.msg_subject.toLowerCase() === "wxforecasts") &&
-        (qualified_msg.qualifiedParameter === undefined ||
-          qualified_msg.qualifiedParameter === null ||
-          qualified_msg.qualifiedParameter === "")
-      ) {
-        if (qualified_msg.msg_subject.toLowerCase() === "temp") {
-          formattedResponse = await formatUnfilteredTempData(wxfUserData.wxfData)
-        } else if (qualified_msg.msg_subject.toLowerCase() === "wxforecasts") {
-          formattedResponse = await formatUnfilteredForecastData(wxfUserData.wxfData)
-        }
+        // provider returned invalid dataset for some reason
       } else {
-        // Default formatting for other subjects or when qualifiedParameter is not empty
-        debugLog("Default formatting for other subjects or when qualifiedParameter is not empty")
-        formattedResponse = await processUserRequest(wxfUserData.wxfData, qualified_msg)
-        //formattedResponse = formatWeatherData(wxfUserData.wxfData, qualified_msg.msg_subject.toLowerCase());
+        preMsg = `Your current location is set to: Label=${wxChatUser.location.label} (Location=${wxChatUser.location.value})`
+        await sendMessage(chat, wxChatUser, "I'm sorry, I couldn't retrieve the weather alert data for your location.", preMsg)
+      }
+    } //end of weather alerts related activity
+    return
+  } //end of handleWeatherAlerts
+
+  async function handleWeatherForecast(chat, wxChatUser, qualified_msg) {
+    logFunctionName()
+    console.log('DEBUG: Starting handleWeatherForecast with:', {
+      subject: qualified_msg.msg_subject,
+      criteria: qualified_msg.msg_criteria,
+      param: qualified_msg.qualifiedParameter
+    })
+
+    const wxfUserData = await wxBotProviderMap.activeProvider.getProvForecastData(wxChatUser)
+    console.log('DEBUG: Provider returned data structure:', {
+      isValid: wxfUserData.isValid,
+      providerType: wxfUserData.wxfData?.providerType,
+      periodResolution: wxfUserData.wxfData?.periodResolution,
+      daysCount: wxfUserData.wxfData?.wxfData?.length,
+      firstDay: JSON.stringify(wxfUserData.wxfData?.wxfData?.[0])
+    })
+
+    // Handle weather forecast requests
+    if (["temp", "rain", "wind", "badweather", "wxforecasts"].includes(qualified_msg.msg_subject.toLowerCase()) && qualified_msg.isValid) {
+      const userLocation = wxChatUser.location
+
+      if (!userLocation) {
+        await sendMessage(chat, wxChatUser, "Please set your location first before requesting weather information.")
+        return //exits switch and exits function
       }
 
-      preMsg =
-        "Weather for " +
-        chatTeal(wxChatUser.location.label) +
-        (wxChatUser.location.label !== wxChatUser.location.value ? "(" + wxChatUser.location.value + ")" : "")
+      if (wxfUserData.isValid) {
+        let formattedResponse = []
+        
+        // Create processor instance
+        const processor = new WxDataProcessor(
+          wxfUserData.wxfData.providerType, 
+          wxfUserData.wxfData.periodResolution
+        )
 
-      await sendChats(chat, wxChatUser, formattedResponse, cleanupString(preMsg))
+        // Add debug logging before processing
+        console.log('DEBUG: Processing with:', {
+          providerType: wxfUserData.wxfData.providerType,
+          periodResolution: wxfUserData.wxfData.periodResolution,
+          dataLength: wxfUserData.wxfData.wxfData.length
+        })
 
-      debugLog("wxfUserData.wxfData: " + JSON.stringify(wxfUserData.wxfData, null, 3))
+        // New logic block for formatting temp and wxforecasts data
+        if (
+          (qualified_msg.msg_subject.toLowerCase() === "temp" || 
+           qualified_msg.msg_subject.toLowerCase() === "wxforecasts") &&
+          (qualified_msg.qualifiedParameter === undefined ||
+           qualified_msg.qualifiedParameter === null ||
+           qualified_msg.qualifiedParameter === "")
+        ) {
+          // Pass the array of normalized days
+          if (qualified_msg.msg_subject.toLowerCase() === "temp") {
+            formattedResponse = await processor.formatUnfilteredTempData(wxfUserData.wxfData.wxfData)
+          } else if (qualified_msg.msg_subject.toLowerCase() === "wxforecasts") {
+            formattedResponse = await processor.formatUnfilteredForecastData(wxfUserData.wxfData.wxfData)
+          }
+        } else {
+          // Default formatting for other subjects or when qualifiedParameter is not empty
+          debugLog("Default formatting for other subjects or when qualifiedParameter is not empty")
+          formattedResponse = await processor.findThisKindOfWeather(wxfUserData.wxfData.wxfData, qualified_msg)
+        }
 
-      // provider returned invalid dataset for some reason
-    } else {
-      preMsg = `Your current location is set to: Label=${wxChatUser.location.label} (Location=${wxChatUser.location.value})`
-      await sendMessage(chat, wxChatUser, "I'm sorry, I couldn't retrieve the weather data for your location.", preMsg)
+        preMsg =
+          "Weather for " +
+          chatTeal(wxChatUser.location.label) +
+          (wxChatUser.location.label !== wxChatUser.location.value ? "(" + wxChatUser.location.value + ")" : "")
+
+        await sendChats(chat, wxChatUser, formattedResponse, cleanupString(preMsg))
+
+        debugLog("wxfUserData.wxfData: " + JSON.stringify(wxfUserData.wxfData, null, 3))
+
+      } else {
+        preMsg = `Your current location is set to: Label=${wxChatUser.location.label} (Location=${wxChatUser.location.value})`
+        await sendMessage(chat, wxChatUser, "I'm sorry, I couldn't retrieve the weather data for your location.", preMsg)
+      }
+    } else if (!qualified_msg.isValid) {
+      await sendMessage(chat, wxChatUser, qualified_msg.inValidReason || "I'm sorry, I didn't understand that request.")
     }
-  } else if (!qualified_msg.isValid) {
-    await sendMessage(chat, wxChatUser, qualified_msg.inValidReason || "I'm sorry, I didn't understand that request.")
-  }
-  return
-} //end of handleWeatherForecast
+    return
+  } //end of handleWeatherForecast
 
-const handleHelpRequest = async (chat, wxChatUser, qualified_msg) => {
-  debugLog("in handleHelpRequest function....qualified_msg= " + JSON.stringify(qualified_msg, null, 3))
-  // Handle help requests
-  if (qualified_msg.msg_subject === "help" && qualified_msg.isValid) {
-    if (qualified_msg.msg_criteria === "examples") {
-      await sendMessage(chat, wxChatUser, HELP_EXAMPLES_MSG)
-    } else if (qualified_msg.msg_criteria === "location") {
-      await sendMessage(chat, wxChatUser, HELP_LOCATION_MSG)
-    } else if (qualified_msg.msg_criteria === "shortcuts") {
-      await sendMessage(chat, wxChatUser, HELP_SHORTCUTS_MSG)
-    } else if (qualified_msg.msg_criteria === "adminhost" && (wxChatUser.chattyType === "host" || wxChatUser.chattyType === "admin")) {
-      await sendMessage(chat, wxChatUser, HELP_ADMINHOST_MSG)
-    } else {
-      await sendMessage(chat, wxChatUser, "Lets's start from the beginning...\n\n" + WELCOME_MSG)
+  async function handleHelpRequest(chat, wxChatUser, qualified_msg) {
+    debugLog("in handleHelpRequest function...")
+    // Handle help requests
+    if (qualified_msg.msg_subject === "help" && qualified_msg.isValid) {
+      if (qualified_msg.msg_criteria === "examples") {
+        await sendMessage(chat, wxChatUser, HELP_EXAMPLES_MSG)
+      } else if (qualified_msg.msg_criteria === "location") {
+        await sendMessage(chat, wxChatUser, HELP_LOCATION_MSG)
+      } else if (qualified_msg.msg_criteria === "shortcuts") {
+        await sendMessage(chat, wxChatUser, HELP_SHORTCUTS_MSG)
+      } else if (qualified_msg.msg_criteria === "adminhost" && (wxChatUser.chattyType === "host" || wxChatUser.chattyType === "admin")) {
+        await sendMessage(chat, wxChatUser, HELP_ADMINHOST_MSG)
+      } else {
+        await sendMessage(chat, wxChatUser, "Lets's start from the beginning...\n\n" + WELCOME_MSG)
+      }
+      return
+    }
+  }
+
+  async function adminListUsers(chat, wxUsers, wxChatUser, qualified_msg) {
+    logFunctionName()
+    let userList = []
+
+    for (const userId in wxUsers) {
+      const user = wxUsers[userId]
+      const userInfo =
+        `User ID: ${user.wxUserId}, ` +
+        `Type: ${user.chattyType}, ` +
+        `Name: ${user.displayName}, ` +
+        `Location: ${user.location.label} (${user.location.value}), ` +
+        `Status: ${user.isDisabled ? "Disabled" : "Enabled"}` +
+        `${user.isDisabled ? ", Reason: " + user.disabledReason : ""}`
+      userList.push({info: userInfo, user: user})
+    }
+
+    // Sort the userList by isDisabled (disabled first), then by chattyType, then by displayName
+    userList.sort((a, b) => {
+      if (a.user.isDisabled !== b.user.isDisabled) {
+        return b.user.isDisabled ? -1 : 1 // Disabled users first
+      }
+      if (a.user.chattyType !== b.user.chattyType) {
+        return a.user.chattyType.localeCompare(b.user.chattyType)
+      }
+      return a.user.displayName.toLowerCase().localeCompare(b.user.displayName.toLowerCase())
+    })
+
+    // Extract just the info strings after sorting
+    const sortedInfoList = userList.map((item) => item.info)
+
+    // Add headers to group the users
+    let formattedList = ["User List:"]
+    let currentStatus = null
+    let currentType = null
+
+    sortedInfoList.forEach((info) => {
+      const status = info.includes("Status: Disabled") ? "Disabled" : "Enabled"
+      const type = info.split("Type: ")[1].split(",")[0]
+
+      if (status !== currentStatus) {
+        formattedList.push(`\n${status} Users:`)
+        currentStatus = status
+        currentType = null
+      }
+
+      if (type !== currentType) {
+        formattedList.push(`\n  ${type}:`)
+        currentType = type
+      }
+
+      formattedList.push(`    ${info}`)
+    })
+
+    // Call sendChats to send the user list
+    await sendChats(chat, wxChatUser, formattedList)
+  }
+
+  async function handleHostFunction(chat, wxUsers, wxChatUser, qualified_msg) {
+    logFunctionName()
+    const {action, secLevel, ...params} = qualified_msg.qualifiedParameter
+    const lowerCaseAction = action.toLowerCase()
+    debugLog("in handleHostFunction function at beginning....lowerCaseAction= " + JSON.stringify(qualified_msg, null, 3))
+
+    // Security check
+    let hasPermission = false
+    if (secLevel === "admin") {
+      hasPermission = wxChatUser.chattyType === "host" || wxChatUser.chattyType === "admin"
+    } else if (secLevel === "host") {
+      hasPermission = wxChatUser.chattyType === "host"
+    }
+
+    if (!hasPermission) {
+      debugLog("in handleHostFunction function....hasPermission= " + hasPermission)
+      debugLog("in handleHostFunction function....wxChatUser.chattyType= " + wxChatUser.chattyType)
+      await sendMessage(chat, wxChatUser, "You don't have permission to perform this action.")
+      return
+    }
+
+    debugLog(`User is a ${wxChatUser.chattyType}, processing ${secLevel} function: ${lowerCaseAction}`)
+
+    switch (lowerCaseAction) {
+      case "adduser":
+        // Implement add user logic
+        break
+      case "removeuser":
+        // Implement remove user logic
+        break
+      case "userstatus":
+        // Implement enable user logic
+        debugLog("in handleHostFunction case userstatus")
+        await adminUserStatus(chat, wxUsers, wxChatUser, qualified_msg)
+        break
+      case "changegroup":
+        // Implement disable user logic
+        debugLog("in handleHostFunction case changegroup")
+        await hostChangeGroup(chat, wxUsers, wxChatUser, qualified_msg)
+        break
+      case "listusers":
+        // Implement list users logic
+        debugLog("in handleHostFunction case listusers")
+        await adminListUsers(chat, wxUsers, wxChatUser, qualified_msg)
+        break
+      case "updatevariable":
+        // Implement update variable logic
+        break
+      case "listvariables":
+        // Implement list variables logic
+        break
+      // Add cases for other host functions as needed
+      default:
+        await sendMessage(chat, wxChatUser, "Unknown host function.")
     }
     return
   }
-}
 
-async function adminListUsers(chat, wxUsers, wxChatUser, qualified_msg) {
-  logFunctionName()
-  let userList = []
-
-  for (const userId in wxUsers) {
-    const user = wxUsers[userId]
-    const userInfo =
-      `User ID: ${user.wxUserId}, ` +
-      `Type: ${user.chattyType}, ` +
-      `Name: ${user.displayName}, ` +
-      `Location: ${user.location.label} (${user.location.value}), ` +
-      `Status: ${user.isDisabled ? "Disabled" : "Enabled"}` +
-      `${user.isDisabled ? ", Reason: " + user.disabledReason : ""}`
-    userList.push({info: userInfo, user: user})
-  }
-
-  // Sort the userList by isDisabled (disabled first), then by chattyType, then by displayName
-  userList.sort((a, b) => {
-    if (a.user.isDisabled !== b.user.isDisabled) {
-      return b.user.isDisabled ? -1 : 1 // Disabled users first
-    }
-    if (a.user.chattyType !== b.user.chattyType) {
-      return a.user.chattyType.localeCompare(b.user.chattyType)
-    }
-    return a.user.displayName.toLowerCase().localeCompare(b.user.displayName.toLowerCase())
-  })
-
-  // Extract just the info strings after sorting
-  const sortedInfoList = userList.map((item) => item.info)
-
-  // Add headers to group the users
-  let formattedList = ["User List:"]
-  let currentStatus = null
-  let currentType = null
-
-  sortedInfoList.forEach((info) => {
-    const status = info.includes("Status: Disabled") ? "Disabled" : "Enabled"
-    const type = info.split("Type: ")[1].split(",")[0]
-
-    if (status !== currentStatus) {
-      formattedList.push(`\n${status} Users:`)
-      currentStatus = status
-      currentType = null
+  async function adminUserStatus(chat, wxUsers, wxChatUser, qualified_msg) {
+    logFunctionName()
+    const {action, secLevel, ...params} = qualified_msg.qualifiedParameter
+    const lowerCaseAction = action.toLowerCase()
+    debugLog("in adminUserStatus function....lowerCaseAction= " + lowerCaseAction)
+    if (lowerCaseAction === "userstatus") {
+      if (params.status === "enable") {
+        debugLog("in adminUserStatus function....params.status= " + params.status)
+        await userManagement.enableUser(wxUsers, params.userID)
+      } else if (params.status === "disable") {
+        debugLog("in adminUserStatus function....params.status= " + params.status)
+        await userManagement.disableUser(wxUsers, params.userID, params.reason)
+      }
     }
 
-    if (type !== currentType) {
-      formattedList.push(`\n  ${type}:`)
-      currentType = type
-    }
-
-    formattedList.push(`    ${info}`)
-  })
-
-  // Call sendChats to send the user list
-  await sendChats(chat, wxChatUser, formattedList)
-}
-
-async function handleHostFunction(chat, wxUsers, wxChatUser, qualified_msg) {
-  logFunctionName()
-  const {action, secLevel, ...params} = qualified_msg.qualifiedParameter
-  const lowerCaseAction = action.toLowerCase()
-  debugLog("in handleHostFunction function at beginning....lowerCaseAction= " + JSON.stringify(qualified_msg, null, 3))
-
-  // Security check
-  let hasPermission = false
-  if (secLevel === "admin") {
-    hasPermission = wxChatUser.chattyType === "host" || wxChatUser.chattyType === "admin"
-  } else if (secLevel === "host") {
-    hasPermission = wxChatUser.chattyType === "host"
-  }
-
-  if (!hasPermission) {
-    debugLog("in handleHostFunction function....hasPermission= " + hasPermission)
-    debugLog("in handleHostFunction function....wxChatUser.chattyType= " + wxChatUser.chattyType)
-    await sendMessage(chat, wxChatUser, "You don't have permission to perform this action.")
     return
   }
 
-  debugLog(`User is a ${wxChatUser.chattyType}, processing ${secLevel} function: ${lowerCaseAction}`)
+  async function hostChangeGroup(chat, wxUsers, wxChatUser, qualified_msg) {
+    logFunctionName()
+    const {action, secLevel, ...params} = qualified_msg.qualifiedParameter
+    const lowerCaseAction = action.toLowerCase()
+    debugLog("in hostChangeGroup function....lowerCaseAction= " + lowerCaseAction)
+    await userManagement.setUserGroup(wxUsers, params.userID, params.group)
 
-  switch (lowerCaseAction) {
-    case "adduser":
-      // Implement add user logic
-      break
-    case "removeuser":
-      // Implement remove user logic
-      break
-    case "userstatus":
-      // Implement enable user logic
-      debugLog("in handleHostFunction case userstatus")
-      await adminUserStatus(chat, wxUsers, wxChatUser, qualified_msg)
-      break
-    case "changegroup":
-      // Implement disable user logic
-      debugLog("in handleHostFunction case changegroup")
-      await hostChangeGroup(chat, wxUsers, wxChatUser, qualified_msg)
-      break
-    case "listusers":
-      // Implement list users logic
-      debugLog("in handleHostFunction case listusers")
-      await adminListUsers(chat, wxUsers, wxChatUser, qualified_msg)
-      break
-    case "updatevariable":
-      // Implement update variable logic
-      break
-    case "listvariables":
-      // Implement list variables logic
-      break
-    // Add cases for other host functions as needed
-    default:
-      await sendMessage(chat, wxChatUser, "Unknown host function.")
+    return
   }
-  return
-}
 
-const adminUserStatus = async (chat, wxUsers, wxChatUser, qualified_msg) => {
-  logFunctionName()
-  const {action, secLevel, ...params} = qualified_msg.qualifiedParameter
-  const lowerCaseAction = action.toLowerCase()
-  debugLog("in adminUserStatus function....lowerCaseAction= " + lowerCaseAction)
-  if (lowerCaseAction === "userstatus") {
-    if (params.status === "enable") {
-      debugLog("in adminUserStatus function....params.status= " + params.status)
-      await userManagement.enableUser(wxUsers, params.userID)
-    } else if (params.status === "disable") {
-      debugLog("in adminUserStatus function....params.status= " + params.status)
-      await userManagement.disableUser(wxUsers, params.userID, params.reason)
+  async function sendMessage(chat, wxChatUser, message, preMsg = null) {
+    if (preMsg) {
+      await chat.apiSendTextMessage(wxChatUser.apiSendInfo.Type, wxChatUser.apiSendInfo.ID, preMsg)
     }
+    await chat.apiSendTextMessage(wxChatUser.apiSendInfo.Type, wxChatUser.apiSendInfo.ID, message)
   }
 
-  return
-}
+  async function sendChats(chat, wxChatUser, arr, preMsg = null) {
+    debugLog("in sendChats function....")
+    debugLog("arr length= " + arr.length)
 
-const hostChangeGroup = async (chat, wxUsers, wxChatUser, qualified_msg) => {
-  logFunctionName()
-  const {action, secLevel, ...params} = qualified_msg.qualifiedParameter
-  const lowerCaseAction = action.toLowerCase()
-  debugLog("in hostChangeGroup function....lowerCaseAction= " + lowerCaseAction)
-  await userManagement.setUserGroup(wxUsers, params.userID, params.group)
-
-  return
-}
-
-const sendMessage = async (chat, wxChatUser, message, preMsg = null) => {
-  if (preMsg) {
-    await chat.apiSendTextMessage(wxChatUser.apiSendInfo.Type, wxChatUser.apiSendInfo.ID, preMsg)
-  }
-  await chat.apiSendTextMessage(wxChatUser.apiSendInfo.Type, wxChatUser.apiSendInfo.ID, message)
-}
-
-const sendChats = async (chat, wxChatUser, arr, preMsg = null) => {
-  debugLog("in sendChats function....")
-  debugLog("arr length= " + arr.length)
-
-  if (preMsg) {
-    await chat.apiSendTextMessage(wxChatUser.apiSendInfo.Type, wxChatUser.apiSendInfo.ID, preMsg)
-  }
-
-  if (arr.length == 0) {
-    await chat.apiSendTextMessage(
-      wxChatUser.apiSendInfo.Type,
-      wxChatUser.apiSendInfo.ID,
-      "Sorry, your request found nothing to report, try /h if you need command syntax help"
-    )
-  } else {
-    for (var i = 0; i < arr.length; i++) {
-      await chat.apiSendTextMessage(wxChatUser.apiSendInfo.Type, wxChatUser.apiSendInfo.ID, arr[i])
+    if (preMsg) {
+      await chat.apiSendTextMessage(wxChatUser.apiSendInfo.Type, wxChatUser.apiSendInfo.ID, preMsg)
     }
-  }
-  return
-}
 
-module.exports = {
-  HELP_LOCATION_MSG,
-  WELCOME_MSG,
-  adminListUsers,
-  cleanupString,
-  chatTeal,
-  chatBlue,
-  chatYellow,
-  debugLog,
-  processUserRequest,
-  formatRainData,
-  formatWindData,
-  formatSearchData,
-  formatUnfilteredTempData,
-  formatUnfilteredForecastData,
-  handleLocationUpdate,
-  handleWeatherForecast,
-  handleWeatherAlerts,
-  handleHelpRequest,
-  handleHostFunction,
-  evaluateMessage,
-  sendMessage,
-  sendChats,
-}
+    if (arr.length == 0) {
+      await chat.apiSendTextMessage(
+        wxChatUser.apiSendInfo.Type,
+        wxChatUser.apiSendInfo.ID,
+        "Sorry, your request found nothing to report, try /h if you need command syntax help"
+      )
+    } else {
+      for (var i = 0; i < arr.length; i++) {
+        await chat.apiSendTextMessage(wxChatUser.apiSendInfo.Type, wxChatUser.apiSendInfo.ID, arr[i])
+      }
+    }
+    return
+  }
+
+  module.exports = {
+    HELP_LOCATION_MSG,
+    WELCOME_MSG,
+    adminListUsers,
+    cleanupString,
+    chatTeal,
+    chatBlue,
+    chatYellow,
+    debugLog,
+    processUserRequest,
+    handleLocationUpdate,
+    handleWeatherForecast,
+    handleWeatherAlerts,
+    handleHelpRequest,
+    handleHostFunction,
+    evaluateMessage,
+    sendMessage,
+    sendChats,
+    WxDataProcessor
+  }
