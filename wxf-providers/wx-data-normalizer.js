@@ -83,46 +83,53 @@ class WxDataNormalizer {
 
   static checkForBadWeather(description) {
     const badWeatherWords = badWeatherData.specificCriteria[0].parameter
+    
+    //console.log("debug checkForBadWeather result" + badWeatherWords.some(word => 
+    //  description.toLowerCase().includes(word.toLowerCase())))
+
     return badWeatherWords.some(word => 
       description.toLowerCase().includes(word.toLowerCase())
     )
   }
 
   // Add helper method for day name formatting
-  static getAdjustedDayName(date, currentDate = new Date()) {
+  static getAdjustedDayName(dateStr, currentDate = new Date()) {
     const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
-    const dayName = dayNames[date.getDay()]
     
-    // Set currentDate to midnight for clean comparison
-    currentDate.setHours(0, 0, 0, 0)
-
-    // Calculate the end of the current week (next Saturday)
-    const endOfCurrentWeek = new Date(currentDate)
-    endOfCurrentWeek.setDate(currentDate.getDate() + (7 - currentDate.getDay()))
-    endOfCurrentWeek.setHours(23, 59, 59, 999)
-
-    // Calculate the start of the next week (next Sunday)
-    const startOfNextWeek = new Date(endOfCurrentWeek)
-    startOfNextWeek.setDate(endOfCurrentWeek.getDate() + 1)
-    startOfNextWeek.setHours(0, 0, 0, 0)
-
-    // Calculate the end of the next week (next Saturday after next Sunday)
-    const endOfNextWeek = new Date(startOfNextWeek)
-    endOfNextWeek.setDate(startOfNextWeek.getDate() + 6)
-    endOfNextWeek.setHours(23, 59, 59, 999)
-
-    // If the date is in the current week
-    if (date <= endOfCurrentWeek) {
+    // Parse the ISO date string explicitly
+    const targetDate = new Date(dateStr)
+    const baseDate = new Date(currentDate)
+    baseDate.setHours(0, 0, 0, 0)
+    
+    // Get local day based on the time zone
+    const localDay = targetDate.getDay()
+    const dayName = dayNames[localDay]
+    
+    // Calculate days difference using local dates
+    const targetLocal = new Date(targetDate)
+    targetLocal.setHours(12, 0, 0, 0)
+    const baseLocal = new Date(baseDate)
+    const diffTime = targetLocal.getTime() - baseLocal.getTime()
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+    
+    console.log(`
+      Debug getAdjustedDayName:
+      Input dateStr: ${dateStr}
+      Parsed Target Date: ${targetDate}
+      Local Day: ${localDay}
+      Day Name: ${dayName}
+      Diff Days: ${diffDays}
+      Base Date: ${baseDate}
+      Target Local: ${targetLocal}
+    `)
+    
+    // If within the next 7 days
+    if (diffDays < 7) {
       return dayName
     }
-
-    // If the date is in the next week
-    if (date >= startOfNextWeek && date <= endOfNextWeek) {
-      return "Next " + dayName
-    }
-
-    // For dates beyond the next week, show with date
-    return `${dayName} the ${date.getDate()}${this.getDaySuffix(date.getDate())}`
+    
+    // If 7 days or more
+    return "Next " + dayName
   }
 
   // Helper function for date suffixes
@@ -283,8 +290,24 @@ class WxDataNormalizer {
 
   static extractGustSpeed(detailedForecast) {
     if (!detailedForecast) return 0
-    const gustMatch = detailedForecast.match(/gusts? (?:up )?to (\d+)/i)
-    return gustMatch ? parseInt(gustMatch[1]) : 0
+    
+    // Array of regex patterns to match different gust phrases
+    const gustPatterns = [
+      /gusts? (?:up )?to (\d+)/i,      // "gusts up to 25" or "gust to 25"
+      /gusts? as high as (\d+)/i,       // "gusts as high as 25"
+      /gusting (?:to|up to|over) (\d+)/i, // "gusting to/up to/over 25"
+      /with gusts? (?:to |of |up to )?(\d+)/i  // "with gusts to/of/up to 25"
+    ]
+
+    // Try each pattern until we find a match
+    for (const pattern of gustPatterns) {
+      const match = detailedForecast.match(pattern)
+      if (match) {
+        return parseInt(match[1])
+      }
+    }
+
+    return 0
   }
 }
 

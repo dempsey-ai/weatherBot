@@ -898,18 +898,18 @@ class WxDataProcessor {
   }
 
   FilterForecastWeather(days, qualMsg) {
+    logFunctionName()
     if (!qualMsg.qualifiedParameter) {
       return this.formatUnfilteredForecastData(days)
     }
 
     const params = qualMsg.qualifiedParameter
-    switch (params.action) {
+    switch (params.action.toLowerCase()) {
       case "search":
         return this.handleSearchCriteria(days, params.searchValue)
       case "day":
         return this.formatThisDayForecast(days, params.dayValue)
-      case "nDays":
-        //return this.formatNDaysForecast(days, params.numOfDays)
+      case "ndays":
         const n = parseInt(params.numOfDays) || 1  // Default to 1 if invalid
         const maxDays = days.length - 1  // Subtract 1 because we start from tomorrow
         const daysToShow = Math.min(n, maxDays)  // Don't exceed available days
@@ -920,43 +920,53 @@ class WxDataProcessor {
         return this.formatUnfilteredForecastData(days.slice(1, 2))
       case "tonight":
         if (this.periodResolution === WX_PERIOD_RESOLUTION.DAILY) {
-          // For daily resolution, use the appropriate day
-          const dayIndex = qualMsg.msg_subject === "tomorrow" ? 1 : 0
-          return this.formatDailyForecast(days[dayIndex], qualMsg.msg_subject)
+          // For daily resolution, display today's entire forecast
+          return this.formatUnfilteredForecastData(days.slice(0, 1))
         } 
         else if (this.periodResolution === WX_PERIOD_RESOLUTION.TWELVE_HOUR) {
           // For 12-hour resolution, find the correct period
           const periods = days[0].periods
-          switch(qualMsg.msg_subject) {
-            case "today":
-              return this.formatTodayForecast(periods.find(p => p.timeOfDay === "day"))
+          debugLog('Debug - Array Check:', {
+            isArray: Array.isArray(periods),
+            length: periods.length,
+            periodTypes: periods.map(p => typeof p),
+            timeOfDays: periods.map(p => p.timeOfDay)
+          })
+
+          // Test direct array access
+          debugLog('Debug - Direct Access:', {
+            period0: periods[0]?.timeOfDay,
+            period1: periods[1]?.timeOfDay
+          })
+
+          // Test find with debugging
+          const nightPeriod = periods.find(p => {
+            debugLog('Debug - Find iteration:', {
+              timeOfDay: p.timeOfDay,
+              matches: p.timeOfDay === "night"
+            })
+            return p.timeOfDay === "night"
+          })
+
+          switch(params.action.toLowerCase()) {
             case "tonight":
-              return this.formatTonightForecast(periods.find(p => p.timeOfDay === "night"))
-            case "tomorrow":
-              return this.formatTomorrowForecast(
-                periods.find(p => p.timeOfDay === "day"),
-                periods.find(p => p.timeOfDay === "night")
-              )
+              debugLog('Debug - Night Period Found:', nightPeriod)
+              return this.formatTonightForecast(nightPeriod)
           }
         }
         else if (this.periodResolution === WX_PERIOD_RESOLUTION.HOURLY) {
           // For hourly resolution, group relevant hours
           const currentHour = new Date().getHours()
           const periods = days[0].periods
-          switch(qualMsg.msg_subject) {
-            case "today":
-              return this.formatHourlyForecast(periods.filter(p => {
-                          const hour = new Date(p.startTime).getHours()
-                          return hour >= currentHour && hour < 18}),"Today")
+          switch(params.action.toLowerCase()) {
             case "tonight":
               return this.formatHourlyForecast(periods.filter(p => {
                   const hour = new Date(p.startTime).getHours()
                           return hour >= 18 || hour < 6}),"Tonight")
-            case "tomorrow":
-              return this.formatHourlyForecast(periods.filter(p => {
-                  const hour = new Date(p.startTime).getHours()
-                          return hour >= 6 && hour < 18}),"Tomorrow")
           }
+        }
+        else {
+          return ["case tonight fell through all if checks"]
         }
       default:
         return ["Invalid forecast request"]
@@ -964,7 +974,7 @@ class WxDataProcessor {
   }
 
   formatTodayForecast(day) {
-    console.log("WxDataProcessor formatTodayForecast input:", { day: JSON.stringify(day) })  // Add debug logging
+    debugLog("WxDataProcessor formatTodayForecast input:", { day: JSON.stringify(day) })  // Add debug logging
     const formattedData = []
     
     // Add the daily summary if no periods
@@ -986,68 +996,23 @@ class WxDataProcessor {
     return formattedData.length ? formattedData : ["No more forecasts available for today"]
   }
 
-  formatTonightForecast(day) {
+  formatTonightForecast(period) {
+    debugLog("WxDataProcessor formatTonightForecast input:", { period })
+    
+    if (!period || !period.conditions) {
+      return ["No tonight forecast available"]
+    }
+
     const formattedData = []
     
-    // For daily providers, just show the low
-    if (!day.periods.length) {
-      const nightSummary = `${chatTeal(day.dayOfWeek)} Night: Low of ${
-        chatBlue(`${day.summary.low}°F`)
-      }. ${day.summary.description}`
-      formattedData.push(cleanupString(nightSummary))
-      return formattedData
-    }
-
-    // For multi-period providers, find the next night period
-    const now = new Date()
-    const nightPeriod = day.periods.find(period => 
-      period.timeOfDay === 'night' && new Date(period.startTime) >= now
+    // Format the night period data
+    formattedData.push(
+      `Tonight: ${period.conditions.description} ` +
+      `Temperature: ${period.temperature}°F. ` +
+      `${period.conditions.precipitation.probability > 0 ? 
+        `Chance of precipitation: ${period.conditions.precipitation.probability}%. ` : 
+        ''}`
     )
-
-    if (nightPeriod) {
-      formattedData.push(this.format12hrTempsSummaryStr(day.dayOfWeek, nightPeriod))
-    } else {
-      // If no night period found in current day, check next day
-      formattedData.push(`No more night forecasts available for ${day.dayOfWeek}`)
-    }
-
-    return formattedData
-  }
-
-  formatTomorrowForecast(today, tomorrow) {
-    const formattedData = []
-
-    // For daily providers
-    if (!tomorrow.periods.length) {
-      formattedData.push(this.formatDailyTempsSummaryStr(tomorrow))
-      return formattedData
-    }
-
-    // For multi-period providers, get all periods for tomorrow
-    tomorrow.periods.forEach(period => {
-      formattedData.push(this.format12hrTempsSummaryStr(tomorrow.dayOfWeek, period))
-    })
-
-    return formattedData
-  }
-
-  formatNDaysForecast(days, numDays) {
-    const formattedData = []
-    const endIndex = Math.min(numDays, days.length)
-
-    for (let i = 0; i < endIndex; i++) {
-      const day = days[i]
-      
-      if (!day.periods.length) {
-        // Daily provider
-        formattedData.push(this.formatDailyTempsSummaryStr(day))
-      } else {
-        // Multi-period provider
-        day.periods.forEach(period => {
-          formattedData.push(this.format12hrTempsSummaryStr(day.dayOfWeek, period))
-        })
-      }
-    }
 
     return formattedData
   }
@@ -1342,8 +1307,8 @@ class WxDataProcessor {
               period.conditions.description.toLowerCase().includes('warning')) {
                 const timePrefix = period.timeOfDay === 'night' ? 'Night' : ''
                 const periodName = timePrefix ? `${day.dayOfWeek} ${timePrefix}` : day.dayOfWeek
-                console.log('DEBUG: FindBadWeatherWords periodName:' +periodName + ', ' + JSON.stringify(period))
-                loopData.push(this.formatPeriod(periodName, period))
+                debugLog('DEBUG: FindBadWeatherWords periodName:' +periodName + ', ' + JSON.stringify(period))
+                loopData.push(this.formatWxPeriod(day.dayOfWeek, period))
               }
             })
           
@@ -1355,8 +1320,31 @@ class WxDataProcessor {
       formattedData.push("No periods with bad weather found in the forecast.")
     }
 
+    // Highlight bad weather words in each formatted string
+    const badWeatherWords = qualMsg.qualifiedParameter
+    formattedData = formattedData.map(str => 
+      this.formatHighlightWords(str, badWeatherWords)
+    )
+
     return formattedData
   }
+
+
+  formatHighlightWords(origStr, arrWordsToHighlight) {
+    logFunctionName()
+    let newStr = origStr
+
+    // Highlight specific words in the description
+    arrWordsToHighlight.forEach((word) => {
+      // Escape special characters in the word
+      const escapedWord = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const regex = new RegExp(`\\b${escapedWord}\\b`, "gi")
+      newStr = newStr.replace(regex, (match) => chatYellow(match))
+    })
+  
+    return newStr
+  }
+  
 
   findActiveAlerts(wxaData, qualMsg) {
     logFunctionName()
@@ -1380,8 +1368,22 @@ class WxDataProcessor {
   }
 
 
-  formatWxPeriod(period) {
-    return cleanupString(`${chatTeal(period.refDayName)}: ${period.wxfDescr}`)
+  formatWxPeriod(dayName, period) {
+    const timePrefix = period.timeOfDay === 'night' ? 'Night' : ''
+    const periodName = timePrefix ? `${dayName} ${timePrefix}` : dayName
+    
+    // Build the description with important weather details
+    const description = [
+      period.conditions.description,
+      `Temperature: ${period.temperature}°F`,
+      period.conditions.precipitation.probability > 0 ? 
+        `Precipitation chance: ${period.conditions.precipitation.probability}%` : null,
+      period.conditions.wind.speed > 0 ?
+        `Wind: ${period.conditions.wind.speed}mph${period.conditions.wind.gust ? 
+          `, gusts to ${period.conditions.wind.gust}mph` : ''}` : null
+    ].filter(Boolean).join('. ')
+
+    return cleanupString(`${chatTeal(periodName)}: ${description}`)
   }
 
 

@@ -145,8 +145,6 @@ const provWeatherBit = {
     }
 
     const cacheTime = Date.now()
-    const badWeatherWords = badWeatherData.specificCriteria[0].parameter
-    const geoBuild = []
 
     const normalizedDays = freshWeatherResults.data
       .filter(dayData => {
@@ -167,7 +165,12 @@ const provWeatherBit = {
       wxfData: normalizedDays
     }
 
-    provWeatherBit.provCacheData.push(geoBlock)
+    if (!useCache) {
+        debugLog("pushing to cache..." + JSON.stringify(geoBlock, null, 3))
+        provWeatherBit.provCacheData.push(geoBlock)
+      }
+  
+
     return {isValid: true, wxfData: geoBlock}
   },
 

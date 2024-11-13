@@ -82,7 +82,7 @@ const provWeatherGov = {
     return date.toLocaleString("en-US", options)
   },
 
-  getAdjustedDayName: (pedKey, pedValue, startDate) => {
+  /*getAdjustedDayName: (pedKey, pedValue, startDate) => {
     const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
     const startDay = startDate.getDay()
     const periodDate = new Date(startDate)
@@ -103,7 +103,7 @@ const provWeatherGov = {
     }
 
     return pedValue.name
-  },
+  },*/
 
   extractGustSpeed: (detailedForecast) => {
     if (!detailedForecast) return 0
@@ -140,20 +140,6 @@ const provWeatherGov = {
     const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
     const index = days.findIndex((day) => dayName.toLowerCase().includes(day.toLowerCase()))
     return index !== -1 ? index + 1 : -1 // Adding 1 to make Sunday 1 and Saturday 7
-  },
-
-  getDayName: (date) => {
-    return ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][date.getDay()]
-  },
-
-  adjustDayName: (name, currentDay, isDaytime) => {
-    if (name.toLowerCase() === "today" || name.toLowerCase() === "tonight") {
-      return currentDay
-    }
-    if (name.toLowerCase() === "tomorrow") {
-      return getDayName(new Date(new Date().setDate(new Date().getDate() + 1)))
-    }
-    return name.replace(" Night", "")
   },
 
   timeLimit: 3600000 * 1, // = 60min   //1702555872762 - 1702519101950
@@ -321,13 +307,17 @@ const provWeatherGov = {
     let response = ""
     let useCache = false
     let geoBlock = undefined
+    //const cacheMidnight = new Date(cacheDate.getFullYear(), cacheDate.getMonth(), cacheDate.getDate()).getTime()
+    const nowDate = new Date()
+    const nowMidnight = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate()).getTime()
     //check cache first and return if recent
     geoBlock = provWeatherGov.provCacheData.find((gArr) => gArr.wxfURL == wxfURL)
 
     if (
       (geoBlock == undefined ? 0 : geoBlock.length) == 0 ||
       forceRefresh ||
-      Date.now() - geoBlock.refDateTimeInt > provWeatherGov.timeLimit
+      Date.now() - geoBlock.refDateTimeInt > provWeatherGov.timeLimit ||
+      Date.now() - nowMidnight <= provWeatherGov.timeLimit  // Force refresh if we're too close to midnight
     ) {
       debugLog("geoID not found or past cacheLimit or forcing refresh requested")
       geoBlock = []
@@ -392,11 +382,6 @@ const provWeatherGov = {
       return {isValid: false, errMsg: "no periods returned from weather.gov", wxfData: undefined}
 
     let cacheTime = Date.now()
-    let geoBuild = []
-    // Use the array from the JSON file to be able to flag "bad" weather forecast periods
-    const badWeatherWords = badWeatherData.specificCriteria[0].parameter
-    let setBadFlag = false
-    let lowercaseDetailedForecast = ""
 
     const normalizedDays = provWeatherGov.normalizeData(freshWeatherResults)
 
@@ -406,6 +391,11 @@ const provWeatherGov = {
       providerType: provWeatherGov.providerType,
       periodResolution: provWeatherGov.periodResolution,
       wxfData: normalizedDays
+    }
+
+    if (!useCache) {
+      debugLog("pushing to cache..." + JSON.stringify(geoBlock, null, 3))
+      provWeatherGov.provCacheData.push(geoBlock)
     }
 
     return {isValid: true, wxfData: geoBlock}
@@ -591,38 +581,44 @@ const provWeatherGov = {
     const currentDate = new Date()
     
     // Group periods by day first
-    const dayPeriods = rawData.properties.periods.reduce((days, period) => {
-      const date = new Date(period.startTime)
-      const dayKey = date.toISOString().split('T')[0]
+    const dayPeriods = rawData.properties.periods.reduce((days, period, index) => {
+      const periodStart = new Date(period.startTime)
+      periodStart.setHours(12, 0, 0, 0)
+      const dayKey = periodStart.toISOString().split('T')[0]
+      
+      console.log(`
+        Processing period:
+        name: ${period.name}
+        startTime: ${period.startTime}
+        isDaytime: ${period.isDaytime}
+        using dayKey: ${dayKey}
+      `)
       
       if (!days[dayKey]) {
         days[dayKey] = {
           periods: [],
           high: -Infinity,
           low: Infinity,
-          date: date
+          date: periodStart
         }
       }
 
-      // Add period with null checks
       days[dayKey].periods.push(new WxPeriod({
         timeOfDay: period.isDaytime ? 'day' : 'night',
-        startTime: period.startTime || date.toISOString(),
-        endTime: period.endTime || new Date(date.getTime() + 12*60*60*1000).toISOString(),
-        temp: period.temperature || 0,
-        description: period.detailedForecast || "No description available",
+        startTime: period.startTime,
+        endTime: period.endTime,
+        temp: period.temperature,
+        description: period.detailedForecast,
         precip: period.probabilityOfPrecipitation?.value || 0,
-        precipAmount: 0, // weather.gov doesn't provide amount
+        precipAmount: 0,
         wind: {
-          speed: WxDataNormalizer.extractWindSpeed(period.windSpeed || "0 mph"),
-          gust: WxDataNormalizer.extractGustSpeed(period.detailedForecast || ""),
-          direction: period.windDirection || ""
-        },
-        clouds: 0, // weather.gov doesn't provide cloud coverage
-        visibility: 0 // weather.gov doesn't provide visibility
+          speed: WxDataNormalizer.extractWindSpeed(period.windSpeed),
+          gust: WxDataNormalizer.extractGustSpeed(period.detailedForecast),
+          direction: period.windDirection
+        }
       }))
 
-      // Update high/low based on time of day
+      // Update high/low temps
       if (period.isDaytime) {
         days[dayKey].high = Math.max(days[dayKey].high, period.temperature || 0)
       } else {
@@ -634,28 +630,47 @@ const provWeatherGov = {
 
     // Convert each day's data into WxDay objects
     return Object.entries(dayPeriods).map(([dateKey, data]) => {
-      // Check each period for bad weather
-      const periodsWithBadWeatherCheck = data.periods.map(period => ({
-        ...period,
-        isBadWeather: WxDataNormalizer.checkForBadWeather(period.conditions.description)
-      }))
+      // For the first night period, use the actual day name
+      const adjustedDate = data.isDaytime ? 
+        new Date(dateKey + 'T12:00:00-05:00') : // Use noon for daytime periods
+        data.date // Use the actual reference date for the first night period
+      
+      const adjustedDayName = WxDataNormalizer.getAdjustedDayName(adjustedDate, currentDate)
 
-      // Get the day name from the date
-      const dayName = data.date.toLocaleDateString('en-US', { weekday: 'long' })
+      // Debug all periods for this day
+      //data.periods.forEach(p => 
+        //console.log(`starttime, endtime, adjustedDayName: ${p.startTime} ${p.endTime} ${adjustedDayName}`)
+      //)
+
+      // Sort periods to ensure day comes before night
+      const sortedPeriods = [...data.periods].map(period => ({
+        timeOfDay: period.timeOfDay,
+        startTime: period.startTime,
+        endTime: period.endTime,
+        temperature: period.temperature,
+        conditions: {
+          description: period.conditions.description,
+          precipitation: period.conditions.precipitation,
+          wind: period.conditions.wind,
+          clouds: period.conditions.clouds,
+          visibility: period.conditions.visibility
+        },
+        isBadWeather: WxDataNormalizer.checkForBadWeather(period.conditions.description)  // Add flag at period level
+      })).sort((a, b) => a.timeOfDay === 'night' ? 1 : -1);
 
       return new WxDay({
         date: data.date,
-        dayOfWeek: dayName,
+        dayOfWeek: adjustedDayName,
         highTemp: data.high === -Infinity ? 0 : data.high,
         lowTemp: data.low === Infinity ? 0 : data.low,
-        description: periodsWithBadWeatherCheck[0]?.description || "No description available",
-        precipProb: periodsWithBadWeatherCheck[0]?.conditions?.precipitation?.probability || 0,
+        description: sortedPeriods[0]?.conditions?.description || "No description available",
+        precipProb: Math.max(...sortedPeriods.map(p => p.conditions.precipitation.probability)),
         precipAmount: 0, // weather.gov doesn't provide amount
-        windSpeed: periodsWithBadWeatherCheck[0]?.conditions?.wind?.speed || 0,
-        windGust: periodsWithBadWeatherCheck[0]?.conditions?.wind?.gust || 0,
-        windDir: periodsWithBadWeatherCheck[0]?.conditions?.wind?.direction || "",
-        periods: periodsWithBadWeatherCheck,
-        isBadWeather: periodsWithBadWeatherCheck.some(period => period.isBadWeather)
+        windSpeed: Math.max(...sortedPeriods.map(p => p.conditions.wind.speed)),
+        windGust: Math.max(...sortedPeriods.map(p => p.conditions.wind.gust)),
+        windDir: sortedPeriods[0]?.conditions?.wind?.direction || "",
+        periods: sortedPeriods,
+        isBadWeather: sortedPeriods.some(p => p.isBadWeather)  // Set day-level flag based on periods
       })
     })
   },
