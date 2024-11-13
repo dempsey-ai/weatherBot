@@ -1007,7 +1007,7 @@ class WxDataProcessor {
     
     // Format the night period data
     formattedData.push(
-      `Tonight: ${period.conditions.description} ` +
+      chatTeal('Tonight') + ': ' + period.conditions.description + ' ' +
       `Temperature: ${period.temperature}°F. ` +
       `${period.conditions.precipitation.probability > 0 ? 
         `Chance of precipitation: ${period.conditions.precipitation.probability}%. ` : 

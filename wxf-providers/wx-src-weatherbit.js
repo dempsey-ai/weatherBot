@@ -132,11 +132,41 @@ const provWeatherBit = {
     let keepTrying = PkeepTrying || false
 
     // Check cache first
-    let geoBlock = provWeatherBit.provCacheData.find(g => g.wxfURL === wxfURL)
+    let useCache = false
+    let geoBlock = undefined
+    const nowDate = new Date()
+    const nowMidnight = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate()).getTime()
+    //check cache first and return if recent
+    geoBlock = provWeatherBit.provCacheData.find(g => g.wxfURL === wxfURL)
+
     
-    if (geoBlock && !forceRefresh && (Date.now() - geoBlock.refDateTimeInt <= provWeatherBit.timeLimit)) {
-      return {isValid: true, wxfData: geoBlock}
-    }
+    if (
+        (geoBlock == undefined ? 0 : geoBlock.length) == 0 ||
+        forceRefresh ||
+        Date.now() - geoBlock.refDateTimeInt > provWeatherBit.timeLimit ||
+        Date.now() - nowMidnight <= provWeatherBit.timeLimit  // startdate driven logic...Force refresh if cache is prior to midnight
+      ) {
+        debugLog("geoID not found or past cacheLimit or forcing refresh requested")
+        geoBlock = []
+        useCache = false
+      } else {
+        useCache = true
+      }
+  
+      if (geoBlock.wxfURL !== undefined) {
+        debugLog("cache calc info...timeLimit..." + provWeatherBit.timeLimit + "....geoBlock...." + geoBlock.refDateTimeInt)
+        debugLog("cache calc info...minus calc " + (Date.now() - parseInt(geoBlock.refDateTimeInt)))
+        debugLog("cache calc info ..new calc... " + (Date.now() - parseInt(geoBlock.refDateTimeInt) > provWeatherBit.timeLimit))
+        debugLog("cache calc info...orig calc... " + (Date.now() - parseInt(geoBlock.refDateTimeInt) > provWeatherBit.timeLimit))
+        }
+
+        debugLog("checked use cache and result is......useCache= " + useCache)
+        if (useCache) {
+          debugLog("using Cache for rate limiting")
+          return {isValid: true, wxfData: geoBlock}
+        }
+    
+    debugLog("Not using Cache, now going to reach out to Weatherbit.io...")
 
     // Fetch fresh data
     const freshWeatherResults = await provWeatherBit.axiosLoop(wxfURL, keepTrying)

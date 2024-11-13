@@ -101,6 +101,12 @@ class WxDataNormalizer {
     const baseDate = new Date(currentDate)
     baseDate.setHours(0, 0, 0, 0)
     
+    // Calculate end of current week, sunday
+    const endOfCurrentWeek = new Date(baseDate)
+    endOfCurrentWeek.setDate(baseDate.getDate() + (7 - baseDate.getDay()))
+    endOfCurrentWeek.setHours(23, 59, 59, 999)
+    console.log('debug- endOfCurrentWeek:', endOfCurrentWeek)
+
     // Get local day based on the time zone
     const localDay = targetDate.getDay()
     const dayName = dayNames[localDay]
@@ -111,7 +117,10 @@ class WxDataNormalizer {
     const baseLocal = new Date(baseDate)
     const diffTime = targetLocal.getTime() - baseLocal.getTime()
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
-    
+
+    // Check if this is the first occurrence after today
+    const isNextOccurrence = targetDate <= endOfCurrentWeek
+
     console.log(`
       Debug getAdjustedDayName:
       Input dateStr: ${dateStr}
@@ -122,15 +131,22 @@ class WxDataNormalizer {
       Base Date: ${baseDate}
       Target Local: ${targetLocal}
     `)
+
     
     // If within the next 7 days
-    if (diffDays < 7) {
+    if (diffDays < 7 && isNextOccurrence) {
       return dayName
     }
-    
-    // If 7 days or more
-    return "Next " + dayName
-  }
+    else if (targetDate.getDate() <= (7 + endOfCurrentWeek.getDate())) {
+      return "Next " + dayName
+    }
+    else {
+      return dayName + ' the ' + targetDate.getDate() + this.getDaySuffix(targetDate.getDate())
+    }
+
+
+
+  }  // end getAdjustedDayName
 
   // Helper function for date suffixes
   static getDaySuffix(day) {

@@ -34,6 +34,10 @@ bot-display-name: weather.gov
 # weather provider API key needed, specific to each provider, and optionally not needed for some providers
 weather-provider-api-key: 
 
+# weather provider id valid values are: weather.gov, weatherbit.io (weather.gov is default in code)
+weather-provider-id: weather.gov
+
+
 # initHostUser, optional Simplex user address to use (or reset) the initial host/admin user upon (re)startup
 # value needs to be quoted due to Simplex use of special chars
 init-host-user:

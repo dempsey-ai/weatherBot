@@ -355,6 +355,20 @@ const wxWbitFunctions = {
 // const activeProvider = wxWbitFunctions
 
 // Currently using weather.gov provider:
-const activeProvider = wxWgovFunctions
+//const activeProvider = wxWgovFunctions
 
+//config file driven
+let activeProvider;
+
+switch (cfg.appConfig.wxProviderId) {
+  case "weatherbit.io":
+    activeProvider = wxWbitFunctions;
+    break;
+  case "weather.gov":
+    activeProvider = wxWgovFunctions;
+    break;
+  default:
+    activeProvider = wxWgovFunctions; // Default to wxWgovFunctions or handle as needed
+    break;
+}
 module.exports = {activeProvider}

@@ -82,28 +82,6 @@ const provWeatherGov = {
     return date.toLocaleString("en-US", options)
   },
 
-  /*getAdjustedDayName: (pedKey, pedValue, startDate) => {
-    const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
-    const startDay = startDate.getDay()
-    const periodDate = new Date(startDate)
-    periodDate.setDate(startDate.getDate() + Math.floor(pedKey / 2))
-
-    const dayName = pedValue.name.split(" ")[0] // Get just the day name, without "Night"
-    const isNight = !pedValue.isDaytime
-
-    // Calculate the next Sunday
-    const daysUntilNextSunday = 7 - startDay
-    const nextSunday = new Date(startDate)
-    nextSunday.setDate(startDate.getDate() + daysUntilNextSunday)
-    nextSunday.setHours(0, 0, 0, 0) // Set to start of next Sunday
-
-    // If the period is after next Sunday AND it's not Sunday
-    if (periodDate > nextSunday && periodDate.getDay() !== 0) {
-      return "Next " + pedValue.name
-    }
-
-    return pedValue.name
-  },*/
 
   extractGustSpeed: (detailedForecast) => {
     if (!detailedForecast) return 0
@@ -307,7 +285,6 @@ const provWeatherGov = {
     let response = ""
     let useCache = false
     let geoBlock = undefined
-    //const cacheMidnight = new Date(cacheDate.getFullYear(), cacheDate.getMonth(), cacheDate.getDate()).getTime()
     const nowDate = new Date()
     const nowMidnight = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate()).getTime()
     //check cache first and return if recent
@@ -335,7 +312,7 @@ const provWeatherGov = {
 
     debugLog("checked use cache and result is......useCache= " + useCache)
     if (useCache) {
-      debugLog("using Cache that becomes wxfVert")
+      debugLog("using Cache for rate limiting")
       return {isValid: true, wxfData: geoBlock}
     }
 
@@ -434,7 +411,6 @@ const provWeatherGov = {
         debugLog("in catch..." + i)
         debugLog(err.response.data.error)
         gotResponse = false
-        //return {result: wxErrorMsg, wxfData: undefined}
       }
       if (gotResponse || !keepTrying) {
         break
@@ -639,7 +615,6 @@ const provWeatherGov = {
         new Date(data.date.getTime()) : 
         currentDate;
       
-      //const adjustedDayName = WxDataNormalizer.getAdjustedDayName(data.period.startTime, adjustedDate);
       let adjustedDayName = data.date;
       // Sort periods to ensure day comes before night
       const sortedPeriods = [...data.periods].map(period => {
