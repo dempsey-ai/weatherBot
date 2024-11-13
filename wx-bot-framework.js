@@ -1420,7 +1420,7 @@ class WxDataProcessor {
         endOfCurrentWeek.setHours(23, 59, 59, 999)
 
         // Check if this is the first occurrence after today
-        const isNextOccurrence = forecastDate > today && (
+        const isNextOccurrence = forecastDate >= today && (
           // Either the date is within current week
           forecastDate <= endOfCurrentWeek ||
           // Or it's the first occurrence of this day after today
@@ -1429,7 +1429,7 @@ class WxDataProcessor {
 
         console.log('Debug - Occurrence Check:', {
           dayOfWeek: day.dayOfWeek,
-          isAfterToday: forecastDate > today,
+          isAfterToday: forecastDate >= today,
           isWithinCurrentWeek: forecastDate <= endOfCurrentWeek,
           isNextOccurrence,
           dayName: day.dayOfWeek

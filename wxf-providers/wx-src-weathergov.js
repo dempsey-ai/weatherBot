@@ -317,7 +317,7 @@ const provWeatherGov = {
       (geoBlock == undefined ? 0 : geoBlock.length) == 0 ||
       forceRefresh ||
       Date.now() - geoBlock.refDateTimeInt > provWeatherGov.timeLimit ||
-      Date.now() - nowMidnight <= provWeatherGov.timeLimit  // Force refresh if we're too close to midnight
+      Date.now() - nowMidnight <= provWeatherGov.timeLimit  // startdate driven logic...Force refresh if cache is prior to midnight
     ) {
       debugLog("geoID not found or past cacheLimit or forcing refresh requested")
       geoBlock = []
@@ -579,20 +579,25 @@ const provWeatherGov = {
 
   normalizeData: (rawData) => {
     const currentDate = new Date()
+    let firstPeriodIsNight = false; // Temporary variable for normalization logic
     
     // Group periods by day first
     const dayPeriods = rawData.properties.periods.reduce((days, period, index) => {
-      const periodStart = new Date(period.startTime)
-      periodStart.setHours(12, 0, 0, 0)
-      const dayKey = periodStart.toISOString().split('T')[0]
-      
-      console.log(`
-        Processing period:
-        name: ${period.name}
-        startTime: ${period.startTime}
-        isDaytime: ${period.isDaytime}
-        using dayKey: ${dayKey}
-      `)
+      let periodStart = new Date(period.startTime);
+      let dayKey = periodStart.toISOString().split('T')[0];
+
+      // Check for prior night condition on first period only
+      if (index === 0) {
+        firstPeriodIsNight = currentDate.getHours() < 6 && 
+                            !period.isDaytime && 
+                            periodStart.toISOString().split('T')[0] === currentDate.toISOString().split('T')[0];
+        
+        if (firstPeriodIsNight) {
+          periodStart.setDate(periodStart.getDate() - 1);
+          periodStart.setHours(18, 0, 0, 0);
+          dayKey = periodStart.toISOString().split('T')[0];
+        }
+      }
       
       if (!days[dayKey]) {
         days[dayKey] = {
@@ -600,12 +605,12 @@ const provWeatherGov = {
           high: -Infinity,
           low: Infinity,
           date: periodStart
-        }
+        };
       }
 
       days[dayKey].periods.push(new WxPeriod({
         timeOfDay: period.isDaytime ? 'day' : 'night',
-        startTime: period.startTime,
+        startTime: periodStart, // Use updated periodStart
         endTime: period.endTime,
         temp: period.temperature,
         description: period.detailedForecast,
@@ -616,35 +621,32 @@ const provWeatherGov = {
           gust: WxDataNormalizer.extractGustSpeed(period.detailedForecast),
           direction: period.windDirection
         }
-      }))
+      }));
 
       // Update high/low temps
       if (period.isDaytime) {
-        days[dayKey].high = Math.max(days[dayKey].high, period.temperature || 0)
+        days[dayKey].high = Math.max(days[dayKey].high, period.temperature || 0);
       } else {
-        days[dayKey].low = Math.min(days[dayKey].low, period.temperature || 0)
+        days[dayKey].low = Math.min(days[dayKey].low, period.temperature || 0);
       }
 
-      return days
-    }, {})
+      return days;
+    }, {});
 
     // Convert each day's data into WxDay objects
     return Object.entries(dayPeriods).map(([dateKey, data]) => {
-      // For the first night period, use the actual day name
-      const adjustedDate = data.isDaytime ? 
-        new Date(dateKey + 'T12:00:00-05:00') : // Use noon for daytime periods
-        data.date // Use the actual reference date for the first night period
+      const adjustedDate = firstPeriodIsNight ? 
+        new Date(data.date.getTime()) : 
+        currentDate;
       
-      const adjustedDayName = WxDataNormalizer.getAdjustedDayName(adjustedDate, currentDate)
-
-      // Debug all periods for this day
-      //data.periods.forEach(p => 
-        //console.log(`starttime, endtime, adjustedDayName: ${p.startTime} ${p.endTime} ${adjustedDayName}`)
-      //)
-
+      //const adjustedDayName = WxDataNormalizer.getAdjustedDayName(data.period.startTime, adjustedDate);
+      let adjustedDayName = data.date;
       // Sort periods to ensure day comes before night
-      const sortedPeriods = [...data.periods].map(period => ({
-        timeOfDay: period.timeOfDay,
+      const sortedPeriods = [...data.periods].map(period => {
+
+        adjustedDayName = WxDataNormalizer.getAdjustedDayName(period.startTime, adjustedDate);
+
+        return {timeOfDay: period.timeOfDay,
         startTime: period.startTime,
         endTime: period.endTime,
         temperature: period.temperature,
@@ -656,7 +658,8 @@ const provWeatherGov = {
           visibility: period.conditions.visibility
         },
         isBadWeather: WxDataNormalizer.checkForBadWeather(period.conditions.description)  // Add flag at period level
-      })).sort((a, b) => a.timeOfDay === 'night' ? 1 : -1);
+        }
+      }).sort((a, b) => a.timeOfDay === 'night' ? 1 : -1);
 
       return new WxDay({
         date: data.date,
@@ -671,8 +674,8 @@ const provWeatherGov = {
         windDir: sortedPeriods[0]?.conditions?.wind?.direction || "",
         periods: sortedPeriods,
         isBadWeather: sortedPeriods.some(p => p.isBadWeather)  // Set day-level flag based on periods
-      })
-    })
+      });
+    });
   },
 } //end of provWeatherGov export
 
