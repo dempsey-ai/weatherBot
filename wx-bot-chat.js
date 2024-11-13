@@ -50,6 +50,9 @@ let wxUsers = {}
 async function run() {
   // Initialize when module loads
   await cfg.initializeConfigs()
+  //await wxBotFramework.setActiveProvider()
+  //console.log(`Active provider: ${wxBotFramework.activeProviderName}`)
+
   const assignedHostUser = cfg.appConfig.initHostUser !== "" // true if initHostUser has a value
 
   const chat = await ChatClient.create(`ws://localhost:${cfg.appConfig.simplexChatPort}`)

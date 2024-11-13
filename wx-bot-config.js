@@ -11,6 +11,7 @@ let appConfig = {
   simplexChatPort: 5225,
   shareBotAddress: false,
   initHostUser: "",
+  //wxProviderId: "weather.gov",
   paths: {
     userHome: "",
     appHost: "",
@@ -46,7 +47,8 @@ async function initializeConfigs() {
     appConfig.isDebug = configyaml.get("debug-mode") === true
     appConfig.botDisplayName = configyaml.get("bot-display-name") || "wxBot"
     appConfig.wxProviderApiKey = configyaml.get("weather-provider-api-key") || ""
-    appConfig.wxProviderId = configyaml.get("weather-provider-id") || "weather.gov"
+    //appConfig.wxProviderId = configyaml.get("weather-provider-id") || "weather.gov"
+    //console.log(`appConfig.wxProviderId: ${appConfig.wxProviderId}`)
 
     // Set temperature thresholds
     appConfig.tempHot = currentMonth >= 6 && currentMonth <= 9 ? configyaml.get("summer-temp-hot") || 85 : configyaml.get("temp-hot") || 75
