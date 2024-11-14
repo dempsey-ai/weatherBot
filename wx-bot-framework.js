@@ -1217,32 +1217,37 @@ class WxDataProcessor {
     const [, paramType, operator, value] = match
     const threshold = parseInt(value)
 
-    days.forEach(day => {
-      let meetsCondition = false
-      const windSpeed = day.summary.wind.avgSpeed
-      const gustSpeed = day.summary.wind.maxGust
+    // For DAILY resolution providers, use summary data
+    if (this.periodResolution === WX_PERIOD_RESOLUTION.DAILY) {
+      days.forEach(day => {
+        let meetsCondition = false
+        const windSpeed = day.summary.wind.avgSpeed
+        const gustSpeed = day.summary.wind.maxGust
 
-      switch (paramType) {
-        case "wmin":
-        case "wmax":
-          meetsCondition = (operator === ">" && (windSpeed > threshold || gustSpeed > threshold)) ||
+        switch (paramType) {
+          case "wmin":
+          case "wmax":
+            meetsCondition = (operator === ">" && (windSpeed > threshold || gustSpeed > threshold)) ||
                           (operator === "<" && (windSpeed < threshold && gustSpeed < threshold))
+            break
+          case "gmin":
+            meetsCondition = (operator === ">" && gustSpeed > threshold)
           break
-        case "gmin":
-          meetsCondition = (operator === ">" && gustSpeed > threshold)
-          break
-      }
-
-      if (meetsCondition) {
-        let windInfo = `Wind: ${windSpeed} mph`
-        if (gustSpeed > 0 && gustSpeed !== windSpeed) {
-          windInfo += `, gusts up to ${gustSpeed} mph`
         }
-        formattedData.push(cleanupString(
-          `${chatTeal(day.dayOfWeek)}: ${chatYellow(windInfo)}. ${day.summary.description}`
-        ))
-      }
 
+        if (meetsCondition) {
+          let windInfo = `Wind: ${windSpeed} mph`
+          if (gustSpeed > 0 && gustSpeed !== windSpeed) {
+          windInfo += `, gusts up to ${gustSpeed} mph`
+          }
+          formattedData.push(cleanupString(
+            `${chatTeal(day.dayOfWeek)}: ${chatYellow(windInfo)}. ${day.summary.description}`
+          ))
+        }
+      })
+     }
+     // For TWELVE_HOUR resolution providers, use periods data
+    else if (this.periodResolution === WX_PERIOD_RESOLUTION.TWELVE_HOUR) {
       // Check individual periods if available
       if (day.periods && day.periods.length > 0) {
         day.periods.forEach(period => {
@@ -1275,7 +1280,7 @@ class WxDataProcessor {
           }
         })
       }
-    })
+    }
 
     if (formattedData.length === 0) {
       formattedData.push(`No periods found with ${paramType === "gmin" ? "gust" : "wind"} speeds ${operator} ${threshold} mph.`)
@@ -1329,22 +1334,26 @@ class WxDataProcessor {
     return formattedData
   }
 
-
+ 
   formatHighlightWords(origStr, arrWordsToHighlight) {
     logFunctionName()
     let newStr = origStr
 
-    // Highlight specific words in the description
     arrWordsToHighlight.forEach((word) => {
       // Escape special characters in the word
       const escapedWord = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-      const regex = new RegExp(`\\b${escapedWord}\\b`, "gi")
+    //const regex = new RegExp(`\\b${escapedWord}\\b`, "gi")  //whole word only
+        const regex = new RegExp(`\\w*${escapedWord}\\w*`, "gi")
+      // Use regex to match the word and allow for surrounding characters
+      //const regex = new RegExp(`(\\b${escapedWord}\\b|${escapedWord})`, "gi") // Matches whole word or substring
+      
       newStr = newStr.replace(regex, (match) => chatYellow(match))
     })
   
     return newStr
   }
-  
+
+
 
   findActiveAlerts(wxaData, qualMsg) {
     logFunctionName()
@@ -1503,7 +1512,7 @@ class WxDataProcessor {
   }
 
   handleSearchCriteria(days, searchValue) {
-    const formattedData = []
+    let formattedData = []
     const searchTerm = searchValue.toLowerCase()
 
     days.forEach(day => {
@@ -1533,7 +1542,14 @@ class WxDataProcessor {
       formattedData.push(`No forecast periods found containing "${searchValue}"`)
     }
 
+    // Highlight search term in each formatted string
+    const arrSearchTerm = [searchValue]
+    formattedData = formattedData.map(str => 
+      this.formatHighlightWords(str, arrSearchTerm)
+    )
+
     return formattedData
+
   }
 
   formatUnfilteredTempData(days) {

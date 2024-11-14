@@ -370,17 +370,25 @@ const provWeatherBit = {
 
 
     // Sun/Moon narrative
-    const sunrise = new Date(dayData.sunrise_ts * 1000)
-    const sunset = new Date(dayData.sunset_ts * 1000)
     const moonPhase = dayData.moon_phase_lunation
+    /*const sunrise = new Date(dayData.sunrise_ts * 1000)
+    const sunset = new Date(dayData.sunset_ts * 1000)
     
+    // Get the local time zone offset in minutes
+    const timezoneOffset = 0 //new Date().getTimezoneOffset() * 60000; // Convert to milliseconds
+
+    // Adjust for UTC offset
+    const localSunrise = new Date(sunrise.getTime() - timezoneOffset);
+    const localSunset = new Date(sunset.getTime() - timezoneOffset);
+
     // Format times
-    const sunriseTime = sunrise.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-    const sunsetTime = sunset.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    const sunriseTime = localSunrise.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    const sunsetTime = localSunset.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
     
     // Add sunrise and sunset
-    description.push(`Sunrise ${sunriseTime}, sunset ${sunsetTime}`)
-    
+    description.push(`Sunrise ${sunriseTime}, sunset ${sunsetTime} (EDT)`)
+    */
+
     // Add moon phase only at significant points
     if (Math.abs(moonPhase - 0) < 0.05 || Math.abs(moonPhase - 1) < 0.05) {
       description.push(" !6 New moon!")
