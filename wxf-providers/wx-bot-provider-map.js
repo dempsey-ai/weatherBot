@@ -7,9 +7,10 @@
 
 // CURRENTLY IMPLEMENTED PROVIDERS:
 // 1. weather.gov
-const weatherGov = require("./wx-src-weathergov")
+const weatherGov = require("./wx-src-weathergov-new")
 // 2. weatherbit.io
 const weatherBit = require("./wx-src-weatherbit")
+
 
 //const openWeatherMap = require("./wx-src-openweathermap");
 //const openMeteo = require("./wx-src-openmeteo");
@@ -20,6 +21,7 @@ const weatherBit = require("./wx-src-weatherbit")
 // then append to the url
 // then open in browser
 
+const { WxDataNormalizer } = require("./wx-data-normalizer")
 const cfg = require("../wx-bot-config")
 const debugLog = (msg) => {
   if (cfg.appConfig.isDebug) {
@@ -57,7 +59,7 @@ const wxWgovFunctions = {
   provCacheData: weatherGov.provWeatherGov.provCacheData,
 
   getProvForecastData: async (wxChatUser) => {
-    debugLog("getProvForecastsData function called...")
+    debugLog("getProvForecastData function called...")
     // Implement logic to get forecast data from the appropriate provider
     let result = false
 
@@ -75,7 +77,7 @@ const wxWgovFunctions = {
     // Check if location already exists in provGeoData
     const existingLocation = wxWgovFunctions.provGeoData.find((loc) => loc.geoData === locID)
     if (existingLocation) {
-      debugLog("existingLocation found: " + JSON.stringify(existingLocation, null, 3))
+      debugLog("existing Location found: " + JSON.stringify(existingLocation, null, 3))
 
       const getWXF_result = await weatherGov.provWeatherGov.getWXF(existingLocation.forecast, false, true)
     if (getWXF_result.isValid) {
@@ -242,7 +244,7 @@ const wxWbitFunctions = {
   provCacheData: weatherBit.provWeatherBit.provCacheData,
 
   getProvForecastData: async (wxChatUser) => {
-    debugLog("getProvForecastsData function called...")
+    debugLog("getProvForecastData function called...")
     let result = false
 
     const userLocation = wxChatUser.location
@@ -260,9 +262,27 @@ const wxWbitFunctions = {
       debugLog("existingLocation found: " + JSON.stringify(existingLocation, null, 3))
 
       const getWXF_result = await weatherBit.provWeatherBit.getWXF(existingLocation.forecast, false, true)
+      console.log(`
+
+
+        =========== getWXF_result ==================
+        ${JSON.stringify(getWXF_result, null, 3)}`);
+      
       if (getWXF_result.isValid) {
-        result = true 
-        return {isValid: result, wxfData: getWXF_result.wxfData}
+        const wxfFinal = WxDataNormalizer.normalize(getWXF_result.wxfData)
+        debugLog(`
+
+        =========== wxfFinal ==================
+        ${JSON.stringify(wxfFinal, null, 3)}`);
+
+        if (wxfFinal.isValid) { 
+          result = true 
+          return {isValid: result, wxfData: wxfFinal.wxfData}
+        }
+      }
+      else {
+        debugLog("No forecast data available for location: " + locID)
+        return {isValid: false, wxfData: undefined}
       }
     }
     else {

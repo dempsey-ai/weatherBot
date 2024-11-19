@@ -1,330 +1,250 @@
-const { WX_DATA_TYPES, WX_PERIOD_RESOLUTION } = require('./wx-provider-types')
-const badWeatherData = require('../wx-bot-wordlists/bad_weather.json')
-
-// Represents a single day's forecast, potentially containing multiple periods
-class WxDay {
-  constructor(data) {
-    this.date = data.date || new Date()
-    this.dayOfWeek = data.dayOfWeek || "Unknown"
-    this.summary = {
-      high: data.highTemp || 0,
-      low: data.lowTemp || 0,
-      description: data.description || "No description available",
-      precipitation: {
-        probability: data.precipProb || 0,
-        amount: data.precipAmount || 0
-      },
-      wind: {
-        avgSpeed: data.windSpeed || 0,
-        maxGust: data.windGust || 0,
-        direction: data.windDir || ""
-      }
-    }
-    this.periods = data.periods || []
-    this.flags = {
-      isBadWeather: data.isBadWeather || false,
-      hasAlerts: data.hasAlerts || false
-    }
-  }
-
-  // Helper method to get temperature for a specific time
-  getTemperature(timeOfDay) {
-    if (this.periods.length === 0) {
-      return timeOfDay === 'day' ? this.summary.high : this.summary.low
-    }
-    const period = this.periods.find(p => p.timeOfDay === timeOfDay)
-    return period ? period.temperature : null
-  }
-
-  // Helper method to get conditions for a specific time
-  getConditions(timeOfDay) {
-    if (this.periods.length === 0) {
-      return this.summary
-    }
-    const period = this.periods.find(p => p.timeOfDay === timeOfDay)
-    return period ? period.conditions : null
-  }
-}
-
-class WxPeriod {
-  constructor(data) {
-    this.timeOfDay = data.timeOfDay || 'day'
-    this.startTime = data.startTime || new Date().toISOString()
-    this.endTime = data.endTime || new Date().toISOString()
-    this.temperature = data.temp || 0
-    this.conditions = {
-      description: data.description || "No description available",
-      precipitation: {
-        probability: data.precip || 0,
-        amount: data.precipAmount || 0
-      },
-      wind: {
-        speed: data.wind?.speed || 0,
-        gust: data.wind?.gust || 0,
-        direction: data.wind?.direction || ""
-      },
-      clouds: data.clouds || 0,
-      visibility: data.visibility || 0
-    }
-  }
-}
+const badWeatherData = require('../wx-bot-wordlists/bad_weather.json');
+const badWeatherWords = badWeatherData.specificCriteria[0].parameter
+const cfg = require("../wx-bot-config");
 
 class WxDataNormalizer {
-  static normalize(rawData, providerType, periodResolution) {
-    switch(providerType) {
-      case WX_DATA_TYPES.DAILY:
-        return WxDataNormalizer.normalizeDaily(rawData)
-      case WX_DATA_TYPES.MULTI_PERIOD:
-        return WxDataNormalizer.normalizeMultiPeriod(rawData, periodResolution)
-      default:
-        throw new Error(`Unknown provider type: ${providerType}`)
-    }
+  // Helper to round numbers consistently
+  static roundNumber(num, precision = 0) {
+    if (num === undefined || num === null) return null;
+    return Number(Number(num).toFixed(precision));
   }
 
-  static checkForBadWeather(description) {
-    const badWeatherWords = badWeatherData.specificCriteria[0].parameter
-    
-    //console.log("debug checkForBadWeather result" + badWeatherWords.some(word => 
-    //  description.toLowerCase().includes(word.toLowerCase())))
-
-    return badWeatherWords.some(word => 
-      description.toLowerCase().includes(word.toLowerCase())
-    )
-  }
-
-  // Add helper method for day name formatting
-  static getAdjustedDayName(dateStr, currentDate = new Date()) {
-    const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+  // Calculate day info for both day and period level
+  static calculateDayInfo(dateStr, currentDate = new Date(), isDaytime = true, isNightPeriod = false) {
+    const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
     
     // Parse the ISO date string explicitly
-    const targetDate = new Date(dateStr)
-    const baseDate = new Date(currentDate)
-    baseDate.setHours(0, 0, 0, 0)
+    const targetDate = new Date(dateStr + 'T00:00:00');
+    const baseDate = new Date(currentDate);
+    baseDate.setHours(0, 0, 0, 0);
     
     // Calculate end of current week, sunday
-    const endOfCurrentWeek = new Date(baseDate)
-    endOfCurrentWeek.setDate(baseDate.getDate() + (7 - baseDate.getDay()))
-    endOfCurrentWeek.setHours(23, 59, 59, 999)
-    console.log('debug- endOfCurrentWeek:', endOfCurrentWeek)
+    const endOfCurrentWeek = new Date(baseDate);
+    endOfCurrentWeek.setDate(baseDate.getDate() + (7 - baseDate.getDay()));
+    endOfCurrentWeek.setHours(23, 59, 59, 999);
 
     // Get local day based on the time zone
-    const localDay = targetDate.getDay()
-    const dayName = dayNames[localDay]
+    const localDay = targetDate.getDay();
+    const baseName = dayNames[localDay];
     
     // Calculate days difference using local dates
-    const targetLocal = new Date(targetDate)
-    targetLocal.setHours(12, 0, 0, 0)
-    const baseLocal = new Date(baseDate)
-    const diffTime = targetLocal.getTime() - baseLocal.getTime()
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+    const targetLocal = new Date(targetDate);
+    targetLocal.setHours(12, 0, 0, 0);
+    const baseLocal = new Date(baseDate);
+    const diffTime = targetLocal.getTime() - baseLocal.getTime();
+    const diffFromToday = Math.floor(diffTime / (1000 * 60 * 60 * 24));
 
     // Check if this is the first occurrence after today
     const isNextOccurrence = targetDate <= endOfCurrentWeek
+    // Calculate one week after end of current week
+    const oneWeekAfterEnd = new Date(endOfCurrentWeek);
+    oneWeekAfterEnd.setDate(endOfCurrentWeek.getDate() + 7);
 
     console.log(`
       Debug getAdjustedDayName:
-      Input dateStr: ${dateStr}
-      Parsed Target Date: ${targetDate}
+      Param dateStr: ${dateStr}
+      Param currentDate: ${currentDate}
+      Key- Parsed Target Date: ${targetDate}
+      Key- End of Current Week: ${endOfCurrentWeek}
+      Key- One Week After End: ${oneWeekAfterEnd}
       Local Day: ${localDay}
-      Day Name: ${dayName}
-      Diff Days: ${diffDays}
+      Key- Day Name via baseName: ${baseName}
+      Diff Days: ${diffFromToday}
       Base Date: ${baseDate}
       Target Local: ${targetLocal}
     `)
 
-    
-    // If within the next 7 days
-    if (diffDays < 7 && isNextOccurrence) {
-      return dayName
-    }
-    else if (targetDate.getDate() <= (7 + endOfCurrentWeek.getDate())) {
-      return "Next " + dayName
-    }
-    else {
-      return dayName + ' the ' + targetDate.getDate() + this.getDaySuffix(targetDate.getDate())
-    }
 
+    const isWithinWeek = diffFromToday < 7 && isNextOccurrence;
+    const isWeekend = [0, 6].includes(localDay);
 
+    // Handle period-specific naming
+    let name = baseName;
+    let enhancedName = baseName;
 
-  }  // end getAdjustedDayName
-
-  // Helper function for date suffixes
-  static getDaySuffix(day) {
-    if (day >= 11 && day <= 13) return 'th'
-    switch (day % 10) {
-      case 1: return 'st'
-      case 2: return 'nd'
-      case 3: return 'rd'
-      default: return 'th'
-    }
-  }
-
-  // For providers that give one forecast per day (like weatherbit.io)
-  static normalizeDaily(rawData) {
-    const description = rawData.weather.description
-    const forecastDate = new Date(rawData.valid_date)
-    const adjustedDayName = WxDataNormalizer.getAdjustedDayName(forecastDate)
-
-    // Extract time of day from the timestamp
-    const hours = new Date(rawData.ts * 1000).getHours()
-    const isDaytime = hours >= 6 && hours < 18 // Basic 6am-6pm check
-
-    return new WxDay({
-      date: forecastDate,
-      dayOfWeek: adjustedDayName,
-      highTemp: rawData.high_temp,
-      lowTemp: rawData.low_temp,
-      description: description,
-      precipProb: rawData.pop,
-      precipAmount: rawData.precip,
-      windSpeed: rawData.wind_spd,
-      windGust: rawData.wind_gust_spd, // Use direct gust speed
-      windDir: rawData.wind_cdir_full,
-      isBadWeather: WxDataNormalizer.checkForBadWeather(description),
-      periods: [{
-        timeOfDay: 'day',
-        startTime: forecastDate.setHours(6, 0, 0, 0),
-        endTime: forecastDate.setHours(18, 0, 0, 0),
-        temp: rawData.high_temp,
-        description: description,
-        precip: rawData.pop,
-        wind: {
-          speed: rawData.wind_spd,
-          gust: rawData.wind_gust_spd,
-          direction: rawData.wind_cdir_full
-        }
-      }]
-    })
-  }
-
-  // For providers with multiple periods per day (like weather.gov)
-  static normalizeMultiPeriod(rawData, resolution) {
-    console.log('debug- normalizeMultiPeriod - resolution:', resolution)
-    const currentDate = new Date()
-    
-    // Helper function to determine period type based on resolution
-    const getPeriodType = (period, resolution) => {
-      switch(resolution) {
-        case WX_PERIOD_RESOLUTION.TWELVE_HOUR:
-          // Use isDaytime flag if available, otherwise use time
-          return 'isDaytime' in period ? 
-            (period.isDaytime ? 'day' : 'night') :
-            (new Date(period.startTime).getHours() >= 6 && 
-             new Date(period.startTime).getHours() < 18 ? 'day' : 'night')
-        
-        case WX_PERIOD_RESOLUTION.HOURLY:
-          // For hourly data, store the hour number
-          return `hour_${new Date(period.startTime).getHours()}`
-        
-        default:
-          // For unknown resolutions, use timestamp
-          return new Date(period.startTime).toISOString()
+    if (isNightPeriod) {
+      name = `${baseName} night`;
+      if (diffFromToday === 0) {
+        enhancedName = "Tonight";
+      } else if (diffFromToday === 1) {
+        enhancedName = "Tomorrow night";
+      } else if (diffFromToday <= 7 && isNextOccurrence) {
+        enhancedName = name;
+      } else if (targetDate <= oneWeekAfterEnd) {
+        enhancedName = `Next ${baseName} night`;
+      } else {
+        enhancedName = `${baseName} night the ${targetDate.getDate()}${this.getDaySuffix(targetDate.getDate())}`;
+      }
+    } else {
+      if (diffFromToday === 0) {
+        enhancedName = "Today";
+      } else if (diffFromToday === 1) {
+        enhancedName = "Tomorrow";
+    } else if (diffFromToday <= 7 && isNextOccurrence) {
+        enhancedName = baseName;
+      } else if (targetDate <= oneWeekAfterEnd) {
+        enhancedName = "Next " + baseName;
+      } else {
+        enhancedName = baseName + ' the ' + targetDate.getDate() + this.getDaySuffix(targetDate.getDate());
       }
     }
 
-    // Group periods by day first
-    const dayPeriods = rawData.properties.periods.reduce((days, period) => {
-      const date = new Date(period.startTime)
-      const dayKey = date.toISOString().split('T')[0]
-      
-      if (!days[dayKey]) {
-        days[dayKey] = {
+    if (cfg.appConfig.isDebug) {
+      console.log(`
+        Debug calculateDayInfo:
+        Input dateStr: ${dateStr}
+        Is Night Period: ${isNightPeriod}
+        Name: ${name}
+        Enhanced Name: ${enhancedName}
+      `);
+    }
+
+    return {
+      name,
+      enhancedName,
+      dayNumber: localDay,
+      diffFromToday,
+      isWeekend,
+      isWithinWeek
+    };
+  }
+
+  static getDaySuffix(day) {
+    if (day >= 11 && day <= 13) return 'th';
+    switch (day % 10) {
+      case 1: return 'st';
+      case 2: return 'nd';
+      case 3: return 'rd';
+      default: return 'th';
+    }
+  }
+
+  // Extract wind speed from description if not provided
+  static extractWindFromDescription(description) {
+    if (!description) return null;
+    
+    const patterns = [
+      /wind(?:s|y)? (?:from|at|of) (\d+)/i,
+      /(\d+)\s*mph wind/i,
+      /wind speeds? (?:up to )?(\d+)/i
+    ];
+
+    for (const pattern of patterns) {
+      const match = description.match(pattern);
+      if (match) {
+        return parseInt(match[1]);
+      }
+    }
+    return null;
+  }
+
+  // Main normalization method
+  static normalize(wxfProv) {
+    const currentDate = new Date(wxfProv.periods[0].date + 'T00:00:00');
+
+    // Group periods by date first
+    const dayMap = new Map();
+    
+    wxfProv.periods.forEach(period => {
+      const date = period.date;
+      if (!dayMap.has(date)) {
+        dayMap.set(date, {
           periods: [],
           high: -Infinity,
-          low: Infinity,
-          date: date,
-          periodResolution: resolution
-        }
+          low: Infinity
+        });
       }
-
-      // Add period with resolution-specific timeOfDay
-      days[dayKey].periods.push(new WxPeriod({
-        timeOfDay: getPeriodType(period, resolution),
-        startTime: period.startTime,
-        endTime: period.endTime,
-        temp: period.temperature,
-        description: period.detailedForecast || period.description,
-        precip: period.probabilityOfPrecipitation?.value ?? 0,
-        precipAmount: period.precipAmount ?? 0,
-        wind: {
-          speed: this.extractWindSpeed(period.windSpeed),
-          gust: this.extractGustSpeed(period.detailedForecast),
-          direction: period.windDirection
-        },
-        clouds: period.clouds ?? 0,
-        visibility: period.visibility ?? 0
-      }))
-
-      // Update high/low based on resolution
-      if (resolution === WX_PERIOD_RESOLUTION.TWELVE_HOUR) {
-        // For 12-hour, use day/night logic
-        if (getPeriodType(period, resolution) === 'day') {
-          days[dayKey].high = Math.max(days[dayKey].high, period.temperature)
-        } else {
-          days[dayKey].low = Math.min(days[dayKey].low, period.temperature)
-        }
-      } else {
-        // For other resolutions, track all temperatures
-        days[dayKey].high = Math.max(days[dayKey].high, period.temperature)
-        days[dayKey].low = Math.min(days[dayKey].low, period.temperature)
+      
+      const dayData = dayMap.get(date);
+      dayData.periods.push(period);
+      
+      // Track high/low temps
+      if (period.temperature.value !== undefined) {
+        dayData.high = Math.max(dayData.high, period.temperature.value);
       }
+      if (period.temperature.low !== undefined) {
+        dayData.low = Math.min(dayData.low, period.temperature.low);
+      }
+    });
 
-      return days
-    }, {})
-
-    // Convert each day's data into WxDay objects
-    return Object.entries(dayPeriods).map(([dateKey, data]) => {
-      const description = data.periods[0].conditions.description
-      const adjustedDayName = WxDataNormalizer.getAdjustedDayName(data.date, currentDate)
-      console.log('debug- normalizeMultiPeriod - data.date, Current Date:', data.date, currentDate)
-
-      return new WxDay({
-        date: data.date,
-        dayOfWeek: adjustedDayName,
-        highTemp: data.high === -Infinity ? 0 : data.high,
-        lowTemp: data.low === Infinity ? 0 : data.low,
-        description: description,
-        precipProb: Math.max(...data.periods.map(p => p.conditions.precipitation.probability)),
-        precipAmount: data.periods.reduce((sum, p) => sum + p.conditions.precipitation.amount, 0),
-        windSpeed: Math.max(...data.periods.map(p => p.conditions.wind.speed)),
-        windGust: Math.max(...data.periods.map(p => p.conditions.wind.gust)),
-        windDir: data.periods[0].conditions.wind.direction,
-        periods: data.periods,
-        isBadWeather: WxDataNormalizer.checkForBadWeather(description)
+    // Convert to wxfFinal format
+    const days = Array.from(dayMap.entries()).map(([date, dayData]) => ({
+      date,
+      dayInfo: this.calculateDayInfo(date, currentDate),
+      temperatures: {
+        high: this.roundNumber(dayData.high),
+        low: this.roundNumber(dayData.low)
+      },
+      periods: dayData.periods.map(period => {
+        const isNightPeriod = !period.isDaytime;
+        const provDescription = wxfProv.metadata.provider.capabilities.useEnhancedDescription && 
+                                period.conditions.enhancedDescription ? 
+                                period.conditions.enhancedDescription : 
+                                period.conditions.description
+        
+        return {
+          date: period.date,
+          dayInfo: this.calculateDayInfo(period.date, currentDate, period.isDaytime, isNightPeriod),
+          isDaytime: period.isDaytime,
+          startTime: period.startTime,
+          endTime: period.endTime,
+          temperature: this.roundNumber(period.temperature.value),
+          description: provDescription,
+          conditions: {
+            precipitation: {
+              probability: this.roundNumber(period.conditions.precipitation.probability),
+              amount: period.conditions.precipitation.amount ? 
+                      this.roundNumber(period.conditions.precipitation.amount, 2) : undefined,
+              type: period.conditions.precipitation.type
+            },
+            wind: {
+              speed: this.roundNumber(period.conditions.wind.speed) || 
+                     this.extractWindFromDescription(period.conditions.description),
+              gust: period.conditions.wind.gust ? 
+                    this.roundNumber(period.conditions.wind.gust) : undefined,
+              direction: period.conditions.wind.direction
+            },
+            atmospheric: period.conditions.atmospheric ? {
+              visibility: this.roundNumber(period.conditions.atmospheric.visibility),
+              humidity: this.roundNumber(period.conditions.atmospheric.humidity),
+              pressure: this.roundNumber(period.conditions.atmospheric.pressure),
+              dewpoint: this.roundNumber(period.conditions.atmospheric.dewpoint),
+              uvIndex: this.roundNumber(period.conditions.atmospheric.uvIndex)
+            } : undefined
+          },
+          astronomy: {
+            sunrise: period.astronomy?.sunrise,
+            sunset: period.astronomy?.sunset,
+            moonPhase: period.astronomy?.moonPhase
+          },
+          flags: {
+            isBadWeather: (
+              badWeatherWords.some(word => provDescription.toLowerCase().includes(word.toLowerCase())) || 
+              (wxfProv.metadata.provider.capabilities.hasCodesForBadFlag && 
+               wxfProv.metadata.provider.capabilities.badWeatherCodes.includes(Number(period.conditions.codes.code)))
+            )
+          }
+        };
       })
-    })
-  }
+    }));
 
-  // Helper methods for wind speed parsing
-  static extractWindSpeed(windSpeedStr) {
-    if (!windSpeedStr) return 0
-    const matches = windSpeedStr.match(/\d+/g)
-    if (!matches) return 0
-    // If range like "15 to 20", take the higher number
-    return Math.max(...matches.map(Number))
-  }
-
-  static extractGustSpeed(detailedForecast) {
-    if (!detailedForecast) return 0
-    
-    // Array of regex patterns to match different gust phrases
-    const gustPatterns = [
-      /gusts? (?:up )?to (\d+)/i,      // "gusts up to 25" or "gust to 25"
-      /gusts? as high as (\d+)/i,       // "gusts as high as 25"
-      /gusting (?:to|up to|over) (\d+)/i, // "gusting to/up to/over 25"
-      /with gusts? (?:to |of |up to )?(\d+)/i  // "with gusts to/of/up to 25"
-    ]
-
-    // Try each pattern until we find a match
-    for (const pattern of gustPatterns) {
-      const match = detailedForecast.match(pattern)
-      if (match) {
-        return parseInt(match[1])
+    return {
+      isValid: true,
+      wxfData: {
+        metadata: {
+          providerName: wxfProv.metadata.provider.name,
+        providerType: wxfProv.metadata.provider.type,
+        periodResolution: wxfProv.metadata.provider.periodResolution,
+        location: {
+          timezone: wxfProv.metadata.location.timezone,
+          wxfURL: wxfProv.metadata.location.wxfURL
+        },
+        generated: wxfProv.metadata.generated.timestamp
+        },
+        forecast: { days }
       }
-    }
-
-    return 0
+    };
   }
 }
 
-module.exports = { WxDay, WxPeriod, WxDataNormalizer } 
+module.exports = { WxDataNormalizer }; 

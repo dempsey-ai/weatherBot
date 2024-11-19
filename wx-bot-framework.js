@@ -35,17 +35,21 @@ const chatYellow = (someString) => {
   return (someString = " !4 " + someString + "! ")
 }
 
-const WELCOME_MSG =
+
+const DISCLAIMER_MSG = "!1 Weather Forecast Disclaimer:! The original source code for weatherBot was available at https://github.com/scottdempsey/weatherBot which can be reviewed by anyone to understand how the weather data is sourced and processed. The weather information provided by weatherBot is sourced from a third-party weather API. While we strive to provide the most accurate and up-to-date weather forecasts, we cannot guarantee the reliability or completeness of this information. The weather can be unpredictable, and actual conditions may differ from the forecast. Additionally, weatherBot has a default forecast refresh rate of 1 hour unless changed by the weatherBot host and there is chance that weatherBot represents the weather provider's forecasts innacurately. All of this is to say, please use this weather information at your own discretion based on your weatherBot usage experience and do not rely on it for critical decisions. The developer of weatherBot is not responsible for any consequences resulting from the use of the weather data. We recommend checking official weather sources for the most authoritative and reliable forecasts.\nTo display this meesage again send !4 help disclaimer!"
+
+
+const WELCOME_MSG = DISCLAIMER_MSG + "\n\n" +
   "Welcome to the weather bot! Before I can provide weather information, I need to know your" +
   chatYellow("location") +
   ". \n\nYou can easily set your location by sending me a message like," +
   chatYellow("my location is 80809") +
   " or," +
-  chatYellow("my location is pikes peak,co") +
+  chatYellow("my location is Colorado Springs,CO") +
   " or" +
   chatYellow("location 38.8408655,-105.0441532") +
   " etc.  \n\nFor GPS coordinates, you also can assign a label to the location with an additional message like" +
-  chatYellow('location label "pikes peak"') +
+  chatYellow('location label "Pikes Peak"') +
   "\nTo get help later on location setup, send a message with" +
   chatTeal("help location") +
   "\n\nAfter setting your location start with a simple message like" +
@@ -58,11 +62,11 @@ const HELP_LOCATION_MSG =
   "\nHere are some examples of messages you can send to set your location:\n\n" +
   chatYellow("my location is 80809") +
   "\n" +
-  chatYellow("my location is pikes peak,co") +
+  chatYellow("my location is Colorado Springs,CO") +
   "\n" +
   chatYellow("location 38.8408655,-105.0441532") +
   "\n" +
-  chatYellow("location label pikes peak") +
+  chatYellow("location label Pikes Peak") +
   "\n" +
   chatYellow("location map") +
   " (URL link to your precise GPS shape used for weather alerts and forecasts)\n" 
@@ -231,6 +235,8 @@ const evaluateMessage = async (wxChatUser, msg) => {
       helpType = "examples"
     } else if (lowercaseMsg.includes("location")) {
       helpType = "location"
+    } else if (lowercaseMsg.includes("disclaimer")) {
+      helpType = "disclaimer"
     } else if (lowercaseMsg.includes("shortcuts")) {
       helpType = "shortcuts"
     } else if (
@@ -263,10 +269,8 @@ const evaluateMessage = async (wxChatUser, msg) => {
       lowercaseMsg.match("^\\>\\s*(\\\d+)") ||
       lowercaseMsg.match("\\?\\>\\s*(\\\d+)")
 
-    debugLog("regex <35..." + lowercaseMsg.match("^\\<\\s*(\\\d+)"))
-
     if (special_match) {
-      debugLog("found special_match, setting topic")
+      debugLog("found special_match command shortcuts, setting topic")
       bestMatchingTopic = "topic_temps"
     }
   }
@@ -756,7 +760,7 @@ const handleLocationUpdate = async (chat, wxUsers, wxUserId, wxChatUser, qualifi
       } //end of else paramType is not loc-label
 
       // things were updated, log the wxChatUser
-      debugLog("wxChatUser: " + JSON.stringify(wxChatUser, null, 3))
+      //debugLog("wxChatUser: " + JSON.stringify(wxChatUser, null, 3))
     } else if (wxChatUser.locationValue) {
       // If no valid parameter but a location is set, send current location info
       const currentLocationInfo = `Current Provider: ${activeProviderName}\nYour current location is set to: Label=${wxChatUser.location.label} (Location=${wxChatUser.location.value})`
@@ -787,7 +791,7 @@ const handleLocationUpdate = async (chat, wxUsers, wxUserId, wxChatUser, qualifi
 
 const processUserRequest = async (wxData, qualMsg) => {
   logFunctionName()
-  debugLog("wxData= " + JSON.stringify(wxData, null, 3) + " qualMsg= " + JSON.stringify(qualMsg, null, 3))
+  //debugLog("wxData= " + JSON.stringify(wxData, null, 3) + " qualMsg= " + JSON.stringify(qualMsg, null, 3))
 
   // Create processor with provider type and resolution
   const processor = new WxDataProcessor(
@@ -846,18 +850,18 @@ class WxDataProcessor {
       switch(tempType) {
         case "hilo":
           meetsCondition = (operator === ">" && 
-            (day.summary.high > threshold || day.summary.low > threshold)) ||
+            (day.temperatures.high > threshold || day.temperatures.low > threshold)) ||
             (operator === "<" && 
-            (day.summary.high < threshold || day.summary.low < threshold))
+            (day.temperatures.high < threshold || day.temperatures.low < threshold))
           break
         case "hi":
-          tempToCheck = day.summary.high
+          tempToCheck = day.temperatures.high
           periodType = 'day'
           meetsCondition = (operator === ">" && tempToCheck > threshold) || 
                           (operator === "<" && tempToCheck < threshold)
           break
         case "lo":
-          tempToCheck = day.summary.low
+          tempToCheck = day.temperatures.low
           periodType = 'night'
           meetsCondition = (operator === ">" && tempToCheck > threshold) || 
                           (operator === "<" && tempToCheck < threshold)
@@ -865,21 +869,18 @@ class WxDataProcessor {
       }
 
       if (meetsCondition) {
+        //let formattedString = `${chatTeal(day.dayInfo.enhancedName)} (hi: `
+
         // For multi-period providers, we can get the specific period description
-        let description = day.summary.description
-        if (day.periods.length > 0 && periodType) {
-          const period = day.periods.find(p => p.timeOfDay === periodType)
-          if (period) {
-            description = period.conditions.description
-          }
-        }
+        //let description = "" //day.summary.description
+
 
         const tempInfo = tempType === "hilo" ? 
-          `High: ${day.summary.high}°F, Low: ${day.summary.low}°F` :
+          `High: ${day.temperatures.high}°F, Low: ${day.temperatures.low}°F` :
           `${tempType === "hi" ? "High" : "Low"}: ${tempToCheck}°F`
 
         formattedData.push(cleanupString(
-          `${chatTeal(day.dayOfWeek)}: ${chatYellow(tempInfo)}. ${description}`
+          `${chatTeal(day.dayInfo.enhancedName)}: ${chatYellow(tempInfo)}`
         ))
       }
     })
@@ -926,7 +927,7 @@ class WxDataProcessor {
         else if (this.periodResolution === WX_PERIOD_RESOLUTION.TWELVE_HOUR) {
           // For 12-hour resolution, find the correct period
           const periods = days[0].periods
-          debugLog('Debug - Array Check:', {
+          /*debugLog('Debug - Array Check:', {
             isArray: Array.isArray(periods),
             length: periods.length,
             periodTypes: periods.map(p => typeof p),
@@ -937,20 +938,20 @@ class WxDataProcessor {
           debugLog('Debug - Direct Access:', {
             period0: periods[0]?.timeOfDay,
             period1: periods[1]?.timeOfDay
-          })
+          })*/
 
           // Test find with debugging
           const nightPeriod = periods.find(p => {
-            debugLog('Debug - Find iteration:', {
+            /*debugLog('Debug - Find iteration:', {
               timeOfDay: p.timeOfDay,
               matches: p.timeOfDay === "night"
-            })
+            })*/
             return p.timeOfDay === "night"
           })
 
           switch(params.action.toLowerCase()) {
             case "tonight":
-              debugLog('Debug - Night Period Found:', nightPeriod)
+              //debugLog('Debug - Night Period Found:', nightPeriod)
               return this.formatTonightForecast(nightPeriod)
           }
         }
@@ -974,7 +975,7 @@ class WxDataProcessor {
   }
 
   formatTodayForecast(day) {
-    debugLog("WxDataProcessor formatTodayForecast input:", { day: JSON.stringify(day) })  // Add debug logging
+    //debugLog("WxDataProcessor formatTodayForecast input:", { day: JSON.stringify(day) })  // Add debug logging
     const formattedData = []
     
     // Add the daily summary if no periods
@@ -997,7 +998,7 @@ class WxDataProcessor {
   }
 
   formatTonightForecast(period) {
-    debugLog("WxDataProcessor formatTonightForecast input:", { period })
+    //debugLog("WxDataProcessor formatTonightForecast input:", { period })
     
     if (!period || !period.conditions) {
       return ["No tonight forecast available"]
@@ -1117,7 +1118,7 @@ class WxDataProcessor {
   }
 
   format12hrTempsSummaryStr(dayName, period) {
-    console.log("WxDataProcessor formatPeriod input:", { dayName, period: JSON.stringify(period) })  // Add debug logging
+    //debugLog("WxDataProcessor formatPeriod input:", { dayName, period: JSON.stringify(period) })  // Add debug logging
     const timePrefix = period.timeOfDay === 'night' ? 'Night' : ''
     const periodName = timePrefix ? `${dayName} ${timePrefix}` : dayName
     
@@ -1133,21 +1134,24 @@ class WxDataProcessor {
   }
 
   FindRainWeather(days, qualMsg) {
-    console.log('DEBUG: FindRainWeather input:', {
+    if (cfg.appConfig.isDebug) {console.log('DEBUG: FindRainWeather input:', {
       daysCount: days.length,
       firstDayStructure: days[0],
       qualMsg
-    })
+    }) }
+
     let formattedData = []
 
     // For unqualified requests (just "rain"), use summary data
     if (!qualMsg.qualifiedParameter) {
       days.forEach(day => {
-        if (day.summary.precipitation.probability > 0) {
+        day.periods.forEach(period => {
+        if (period.conditions.precipitation.probability > 0) {
           formattedData.push(cleanupString(
-            `${chatTeal(day.dayOfWeek)}: ${chatYellow(`${day.summary.precipitation.probability}% chance of rain`)}. ${day.summary.description}`
+            `${chatTeal(period.dayInfo.enhancedName)}: ${chatYellow(`${period.conditions.precipitation.probability}% chance of rain`)}. ${period.description}`
           ))
-        }
+          }
+        })
       })
       
       if (formattedData.length === 0) {
@@ -1166,22 +1170,9 @@ class WxDataProcessor {
     const [, operator, value] = match
     const threshold = parseInt(value)
 
-    // For DAILY resolution providers, use summary data
-    if (this.periodResolution === WX_PERIOD_RESOLUTION.DAILY) {
-      days.forEach(day => {
-        const rainProb = day.summary.precipitation.probability
-        const meetsCondition = (operator === ">" && rainProb > threshold) || 
-                             (operator === "<" && rainProb < threshold)
-
-        if (meetsCondition) {
-          formattedData.push(cleanupString(
-            `${chatTeal(day.dayOfWeek)}: ${chatYellow(`${rainProb}% chance of rain`)}. ${day.summary.description}`
-          ))
-        }
-      })
-    }
-    // For TWELVE_HOUR resolution providers, use periods data
-    else if (this.periodResolution === WX_PERIOD_RESOLUTION.TWELVE_HOUR) {
+    // For DAILY & TWELVE_HOUR resolution providers, use same period data
+    if (this.periodResolution === WX_PERIOD_RESOLUTION.DAILY || 
+    this.periodResolution === WX_PERIOD_RESOLUTION.TWELVE_HOUR) {
       days.forEach(day => {
         day.periods.forEach(period => {
           const rainProb = period.conditions.precipitation.probability
@@ -1189,10 +1180,25 @@ class WxDataProcessor {
                                (operator === "<" && rainProb < threshold)
 
           if (meetsCondition) {
-            const timePrefix = period.timeOfDay === 'night' ? 'Night' : ''
-            const periodName = timePrefix ? `${day.dayOfWeek} ${timePrefix}` : day.dayOfWeek
             formattedData.push(cleanupString(
-              `${chatTeal(periodName)}: ${chatYellow(`${rainProb}% chance of rain`)}. ${period.conditions.description}`
+              `${chatTeal(period.dayInfo.enhancedName)}: ${chatYellow(`${period.conditions.precipitation.probability}% chance of rain`)}. ${period.description}`
+            ))
+          }
+        })
+      })
+    }
+    // For HOURLY resolution providers, use periods data
+    //TODO: add hourly resolution provider details for the period name if not already included
+    else if (this.periodResolution === WX_PERIOD_RESOLUTION.HOURLY) {
+      days.forEach(day => {
+        day.periods.forEach(period => {
+          const rainProb = period.conditions.precipitation.probability
+          const meetsCondition = (operator === ">" && rainProb > threshold) || 
+                               (operator === "<" && rainProb < threshold)
+
+          if (meetsCondition) {
+            formattedData.push(cleanupString(
+              `${chatTeal(period.dayInfo.enhancedName)}: ${chatYellow(`${period.conditions.precipitation.probability}% chance of rain`)}. ${period.description}`
             ))
           }
         })
@@ -1207,6 +1213,12 @@ class WxDataProcessor {
   }
 
   FindWindyWeather(days, qualMsg) {
+    if (cfg.appConfig.isDebug) {console.log('DEBUG: FindWindyWeather input:', {
+      daysCount: days.length,
+      firstDayStructure: days[0],
+      qualMsg
+    }) }
+
     let formattedData = []
     const match = qualMsg.qualifiedParameter.match(/(wmin|wmax|gmin)([<>])(\d+)/)
     if (!match) {
@@ -1217,12 +1229,14 @@ class WxDataProcessor {
     const [, paramType, operator, value] = match
     const threshold = parseInt(value)
 
-    // For DAILY resolution providers, use summary data
-    if (this.periodResolution === WX_PERIOD_RESOLUTION.DAILY) {
+  // For DAILY & TWELVE_HOUR resolution providers, use same period data
+  if (this.periodResolution === WX_PERIOD_RESOLUTION.DAILY || 
+    this.periodResolution === WX_PERIOD_RESOLUTION.TWELVE_HOUR) {
       days.forEach(day => {
-        let meetsCondition = false
-        const windSpeed = day.summary.wind.avgSpeed
-        const gustSpeed = day.summary.wind.maxGust
+        day.periods.forEach(period => {        
+          let meetsCondition = false
+          const windSpeed = period.conditions.wind.speed
+          const gustSpeed = period.conditions.wind.gust
 
         switch (paramType) {
           case "wmin":
@@ -1241,46 +1255,44 @@ class WxDataProcessor {
           windInfo += `, gusts up to ${gustSpeed} mph`
           }
           formattedData.push(cleanupString(
-            `${chatTeal(day.dayOfWeek)}: ${chatYellow(windInfo)}. ${day.summary.description}`
+            `${chatTeal(period.dayInfo.enhancedName)}: ${chatYellow(windInfo)}. ${period.description}`
           ))
         }
       })
+    })
      }
-     // For TWELVE_HOUR resolution providers, use periods data
-    else if (this.periodResolution === WX_PERIOD_RESOLUTION.TWELVE_HOUR) {
-      // Check individual periods if available
-      if (day.periods && day.periods.length > 0) {
-        day.periods.forEach(period => {
-          const periodWind = period.conditions.wind
-          meetsCondition = false
-          
-          switch (paramType) {
-            case "wmin":
-            case "wmax":
-              meetsCondition = (operator === ">" && 
-                (periodWind.speed > threshold || periodWind.gust > threshold)) ||
-                (operator === "<" && 
-                (periodWind.speed < threshold && periodWind.gust < threshold))
-              break
-            case "gmin":
-              meetsCondition = (operator === ">" && periodWind.gust > threshold)
-              break
-          }
+  // For HOURLY resolution providers, use periods data
+  //TODO: add hourly resolution provider details for the period name if not already included
+  else if (this.periodResolution === WX_PERIOD_RESOLUTION.HOURLY) {
+    days.forEach(day => {
+      day.periods.forEach(period => {
+          let meetsCondition = false
+          const windSpeed = period.conditions.wind.speed
+          const gustSpeed = period.conditions.wind.gust
 
-          if (meetsCondition) {
-            const timePrefix = period.timeOfDay === 'night' ? 'Night' : ''
-            const periodName = timePrefix ? `${day.dayOfWeek} ${timePrefix}` : day.dayOfWeek
-            let windInfo = `Wind: ${periodWind.speed} mph`
-            if (periodWind.gust > 0) {
-              windInfo += `, gusts up to ${periodWind.gust} mph`
-            }
-            formattedData.push(cleanupString(
-              `${chatTeal(periodName)}: ${chatYellow(windInfo)}. ${period.conditions.description}`
-            ))
+        switch (paramType) {
+          case "wmin":
+          case "wmax":
+            meetsCondition = (operator === ">" && (windSpeed > threshold || gustSpeed > threshold)) ||
+                          (operator === "<" && (windSpeed < threshold && gustSpeed < threshold))
+            break
+          case "gmin":
+            meetsCondition = (operator === ">" && gustSpeed > threshold)
+          break
+        }
+
+        if (meetsCondition) {
+          let windInfo = `Wind: ${windSpeed} mph`
+          if (gustSpeed > 0 && gustSpeed !== windSpeed) {
+          windInfo += `, gusts up to ${gustSpeed} mph`
           }
-        })
-      }
-    }
+          formattedData.push(cleanupString(
+            `${chatTeal(period.dayInfo.enhancedName)}: ${chatYellow(windInfo)}. ${period.description}`
+          ))
+        }
+      })
+    })
+     }
 
     if (formattedData.length === 0) {
       formattedData.push(`No periods found with ${paramType === "gmin" ? "gust" : "wind"} speeds ${operator} ${threshold} mph.`)
@@ -1291,34 +1303,21 @@ class WxDataProcessor {
 
   FindBadWeatherWords(days, qualMsg) {
     let formattedData = []
-    let loopData = []
+    const badWeatherWords = qualMsg.qualifiedParameter
 
-    // For DAILY resolution providers, use summary data
-    if (this.periodResolution === WX_PERIOD_RESOLUTION.DAILY) {
+
+  // For DAILY & TWELVE_HOUR resolution providers, use same period data
+  if (this.periodResolution === WX_PERIOD_RESOLUTION.DAILY || 
+    this.periodResolution === WX_PERIOD_RESOLUTION.TWELVE_HOUR) {
       days.forEach(day => {
-        if (day.flags.isBadWeather) {
-          loopData.push(this.formatDailyTempsSummaryStr(day))   //debug--wrong name
-        }
-      })
-      if (loopData.length > 0) { formattedData = loopData}
-    }
-    // For TWELVE_HOUR resolution providers, use periods data
-    else if (this.periodResolution === WX_PERIOD_RESOLUTION.TWELVE_HOUR) {
-      days.forEach(day => {
-          // Add period-specific bad weather if available
         day.periods.forEach(period => {
-          if (period.isBadWeather || 
-            period.conditions.description.toLowerCase().includes('severe') ||
-              period.conditions.description.toLowerCase().includes('warning')) {
-                const timePrefix = period.timeOfDay === 'night' ? 'Night' : ''
-                const periodName = timePrefix ? `${day.dayOfWeek} ${timePrefix}` : day.dayOfWeek
-                debugLog('DEBUG: FindBadWeatherWords periodName:' +periodName + ', ' + JSON.stringify(period))
-                loopData.push(this.formatWxPeriod(day.dayOfWeek, period))
+          if (period.flags.isBadWeather ) {
+            formattedData.push(cleanupString(
+              `${chatTeal(period.dayInfo.enhancedName)}: ${period.description}` ))
               }
             })
           
         })
-        if (loopData.length > 0) { formattedData = loopData}
       }
 
     if (formattedData.length === 0) {
@@ -1326,7 +1325,6 @@ class WxDataProcessor {
     }
 
     // Highlight bad weather words in each formatted string
-    const badWeatherWords = qualMsg.qualifiedParameter
     formattedData = formattedData.map(str => 
       this.formatHighlightWords(str, badWeatherWords)
     )
@@ -1377,26 +1375,8 @@ class WxDataProcessor {
   }
 
 
-  formatWxPeriod(dayName, period) {
-    const timePrefix = period.timeOfDay === 'night' ? 'Night' : ''
-    const periodName = timePrefix ? `${dayName} ${timePrefix}` : dayName
-    
-    // Build the description with important weather details
-    const description = [
-      period.conditions.description,
-      `Temperature: ${period.temperature}°F`,
-      period.conditions.precipitation.probability > 0 ? 
-        `Precipitation chance: ${period.conditions.precipitation.probability}%` : null,
-      period.conditions.wind.speed > 0 ?
-        `Wind: ${period.conditions.wind.speed}mph${period.conditions.wind.gust ? 
-          `, gusts to ${period.conditions.wind.gust}mph` : ''}` : null
-    ].filter(Boolean).join('. ')
-
-    return cleanupString(`${chatTeal(periodName)}: ${description}`)
-  }
-
-
   formatThisDayForecast(days, dayValue) {
+    logFunctionName()
     const formattedData = []
     const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"]
     const searchDay = dayValue.toLowerCase()
@@ -1410,17 +1390,18 @@ class WxDataProcessor {
       forecastDate.setHours(0, 0, 0, 0)
 
       // Get the raw day name without any formatting
-      const rawDayName = dayNames[forecastDate.getDay()]
+      //const rawDayName = dayNames[forecastDate.getDay()]
+      const rawDayName = day.dayInfo.name
 
-      console.log('Debug - Day Names:', {
+      /*debugLog('debug - Day Names:', {
         searchDay,
         rawDayName,
-        formattedDayName: day.dayOfWeek
-      })
+        formattedDayName: day.dayInfo.enhancedName
+      })*/
 
       const dayMatches = isWeekend ? 
-        ["saturday", "sunday"].includes(rawDayName) :
-        rawDayName.startsWith(searchDay)
+      ["saturday", "sunday"].includes(rawDayName.toLowerCase()) :
+      rawDayName.toLowerCase().startsWith(searchDay.toLowerCase())
       
       if (dayMatches) {
         // Calculate end of current week (next Sunday)
@@ -1436,31 +1417,34 @@ class WxDataProcessor {
           !formattedData.length
         )
 
-        console.log('Debug - Occurrence Check:', {
-          dayOfWeek: day.dayOfWeek,
+        /*debugLog('debug - Occurrence Check:', {
+          dayOfWeek: day.dayInfo.name,
           isAfterToday: forecastDate >= today,
           isWithinCurrentWeek: forecastDate <= endOfCurrentWeek,
           isNextOccurrence,
-          dayName: day.dayOfWeek
-        })
+          isWithinWeek: day.dayInfo.isWithinWeek
+        })*/
 
+        //if (day.dayInfo.isWithinWeek) {
         if (isNextOccurrence) {
           // For DAILY resolution providers, use summary
           if (this.periodResolution === WX_PERIOD_RESOLUTION.DAILY) {
-            formattedData.push(this.formatDailyTempsSummaryStr(day))
+//fix            //use enhanced description
+            //formattedData.push(this.formatDailyTempsSummaryStr(day))
+            formattedData.push(cleanupString(
+              `${chatTeal(day.dayInfo.enhancedName)}: ${day.periods[0].description}`
+            ))
           }
           // For MULTI_PERIOD providers, use periods
           else if (this.periodResolution === WX_PERIOD_RESOLUTION.TWELVE_HOUR) {
             // Sort periods to ensure 'day' comes before 'night'
             const sortedPeriods = [...day.periods].sort((a, b) => 
-              a.timeOfDay === 'night' ? 1 : -1
+              a.isDaytime === false ? 1 : -1
             )
             
             sortedPeriods.forEach(period => {
-              const timePrefix = period.timeOfDay === 'night' ? 'Night' : ''
-              const periodName = timePrefix ? `${day.dayOfWeek} ${timePrefix}` : day.dayOfWeek
               formattedData.push(cleanupString(
-                `${chatTeal(periodName)}: ${period.conditions.description}`
+                `${chatTeal(period.dayInfo.enhancedName)}: ${period.description}`
               ))
             })
           }
@@ -1515,28 +1499,20 @@ class WxDataProcessor {
     let formattedData = []
     const searchTerm = searchValue.toLowerCase()
 
-    days.forEach(day => {
-      // For DAILY resolution, check summary
-      if (this.periodResolution === WX_PERIOD_RESOLUTION.DAILY) {
-        if (day.summary.description.toLowerCase().includes(searchTerm)) {
-          formattedData.push(cleanupString(
-            `${chatTeal(day.dayOfWeek)}: ${day.summary.description}`
-          ))
-        }
-      }
-      // For MULTI_PERIOD, check each period
-      else if (this.periodResolution === WX_PERIOD_RESOLUTION.TWELVE_HOUR) {
+    // For DAILY & TWELVE_HOUR resolution providers, use same period data
+    if (this.periodResolution === WX_PERIOD_RESOLUTION.DAILY || 
+      this.periodResolution === WX_PERIOD_RESOLUTION.TWELVE_HOUR) {
+      days.forEach(day => {
         day.periods.forEach(period => {
-          if (period.conditions.description.toLowerCase().includes(searchTerm)) {
-            const timePrefix = period.timeOfDay === 'night' ? 'Night' : ''
-            const periodName = timePrefix ? `${day.dayOfWeek} ${timePrefix}` : day.dayOfWeek
+          if (period.description.toLowerCase().includes(searchTerm)) {
             formattedData.push(cleanupString(
-              `${chatTeal(periodName)}: ${period.conditions.description}`
-            ))
+              `${chatTeal(period.dayInfo.enhancedName)}: ${period.description}`
+          ))
           }
         })
-      }
-    })
+      })
+    }
+
 
     if (formattedData.length === 0) {
       formattedData.push(`No forecast periods found containing "${searchValue}"`)
@@ -1557,22 +1533,22 @@ class WxDataProcessor {
 
     days.forEach(day => {
       // Format string with color coding
-      let formattedString = `${chatTeal(day.dayOfWeek)} (hi: `
+      let formattedString = `${chatTeal(day.dayInfo.enhancedName)} (hi: `
 
       // Add color to high temperature if it exceeds tempHot
-      if (day.summary.high > cfg.appConfig.tempHot) {
-        formattedString += chatYellow(`${day.summary.high}°`)
+      if (day.temperatures.high > cfg.appConfig.tempHot) {
+        formattedString += chatYellow(`${day.temperatures.high}°`)
       } else {
-        formattedString += `${day.summary.high}°`
+        formattedString += `${day.temperatures.high}°`
       }
 
       formattedString += `, night: `
       
       // Add color to low temperature if it's below tempCold
-      if (day.summary.low < cfg.appConfig.tempCold) {
-        formattedString += chatBlue(`${day.summary.low}°`)
+      if (day.temperatures.low < cfg.appConfig.tempCold) {
+        formattedString += chatBlue(`${day.temperatures.low}°`)
       } else {
-        formattedString += `${day.summary.low}°`
+        formattedString += `${day.temperatures.low}°`
       }
       
       formattedString += ")"
@@ -1590,7 +1566,7 @@ class WxDataProcessor {
       // For DAILY resolution providers, use summary
       if (this.periodResolution === WX_PERIOD_RESOLUTION.DAILY) {
         formattedData.push(cleanupString(
-          `${chatTeal(day.dayOfWeek)}: ${day.summary.description}`
+          `${chatTeal(day.dayInfo.enhancedName)}: ${day.periods[0].description}`  //only 1 period for daily
         ))
       }
       // For MULTI_PERIOD providers, use periods
@@ -1601,10 +1577,10 @@ class WxDataProcessor {
         )
         
         sortedPeriods.forEach(period => {
-          const timePrefix = period.timeOfDay === 'night' ? 'Night' : ''
-          const periodName = timePrefix ? `${day.dayOfWeek} ${timePrefix}` : day.dayOfWeek
+          //const timePrefix = period.timeOfDay === 'night' ? 'Night' : ''
+          //const periodName = timePrefix ? `${day.dayOfWeek} ${timePrefix}` : day.dayOfWeek
           formattedData.push(cleanupString(
-            `${chatTeal(periodName)}: ${period.conditions.description}`
+            `${chatTeal(period.dayInfo.enhancedName)}: ${period.description}`
           ))
         })
       }
@@ -1676,20 +1652,20 @@ class WxDataProcessor {
 
   async function handleWeatherForecast(chat, wxChatUser, qualified_msg) {
     logFunctionName()
-    console.log('DEBUG: Starting handleWeatherForecast with:', {
+    /*debugLog('DEBUG: Starting handleWeatherForecast with:', {
       subject: qualified_msg.msg_subject,
       criteria: qualified_msg.msg_criteria,
       param: qualified_msg.qualifiedParameter
-    })
+    })*/
 
     const wxfUserData = await wxBotProviderMap.activeProvider.getProvForecastData(wxChatUser)
-    console.log('DEBUG: Provider returned data structure:', {
+    /*debugLog('DEBUG: Provider returned data structure:', {
       isValid: wxfUserData.isValid,
-      providerType: wxfUserData.wxfData?.providerType,
-      periodResolution: wxfUserData.wxfData?.periodResolution,
-      daysCount: wxfUserData.wxfData?.wxfData?.length,
-      firstDay: JSON.stringify(wxfUserData.wxfData?.wxfData?.[0])
-    })
+      providerType: wxfUserData.wxfData?.metadata?.providerType,
+      periodResolution: wxfUserData.wxfData?.metadata?.periodResolution,
+      daysCount: wxfUserData.wxfData?.forecast?.days?.length,
+      firstDay: JSON.stringify(wxfUserData.wxfData?.forecast?.days?.[0])
+    })*/
 
     // Handle weather forecast requests
     if (["temp", "rain", "wind", "badweather", "wxforecasts"].includes(qualified_msg.msg_subject.toLowerCase()) && qualified_msg.isValid) {
@@ -1700,20 +1676,28 @@ class WxDataProcessor {
         return //exits switch and exits function
       }
 
+      // Check if we got valid data back
+      if (!wxfUserData || !wxfUserData.isValid) {
+        const errorMsg = "I'm sorry, but I couldn't get valid weather data for your location. This might mean the location isn't supported or there was a problem with the weather service."
+        const preMsg = `Your current location is set to: Label=${wxChatUser.location.label} (Location=${wxChatUser.location.value})`
+        await sendMessage(chat, wxChatUser, errorMsg, preMsg)
+        return
+      }
+      
       if (wxfUserData.isValid) {
         let formattedResponse = []
         
         // Create processor instance
         const processor = new WxDataProcessor(
-          wxfUserData.wxfData.providerType, 
-          wxfUserData.wxfData.periodResolution
+          wxfUserData.wxfData.metadata.providerType, 
+          wxfUserData.wxfData.metadata.periodResolution
         )
 
         // Add debug logging before processing
-        console.log('DEBUG: Processing with:', {
-          providerType: wxfUserData.wxfData.providerType,
-          periodResolution: wxfUserData.wxfData.periodResolution,
-          dataLength: wxfUserData.wxfData.wxfData.length
+        debugLog('DEBUG: Processing with:', {
+          providerType: wxfUserData.wxfData.metadata.providerType,
+          periodResolution: wxfUserData.wxfData.metadata.periodResolution,
+          dataLength: wxfUserData.wxfData.forecast.days.length
         })
 
         // New logic block for formatting temp and wxforecasts data
@@ -1726,14 +1710,14 @@ class WxDataProcessor {
         ) {
           // Pass the array of normalized days
           if (qualified_msg.msg_subject.toLowerCase() === "temp") {
-            formattedResponse = await processor.formatUnfilteredTempData(wxfUserData.wxfData.wxfData)
+            formattedResponse = await processor.formatUnfilteredTempData(wxfUserData.wxfData.forecast.days)
           } else if (qualified_msg.msg_subject.toLowerCase() === "wxforecasts") {
-            formattedResponse = await processor.formatUnfilteredForecastData(wxfUserData.wxfData.wxfData)
+            formattedResponse = await processor.formatUnfilteredForecastData(wxfUserData.wxfData.forecast.days)
           }
         } else {
           // Default formatting for other subjects or when qualifiedParameter is not empty
           debugLog("Default formatting for other subjects or when qualifiedParameter is not empty")
-          formattedResponse = await processor.findThisKindOfWeather(wxfUserData.wxfData.wxfData, qualified_msg)
+          formattedResponse = await processor.findThisKindOfWeather(wxfUserData.wxfData.forecast.days, qualified_msg)
         }
 
         preMsg =
@@ -1743,7 +1727,7 @@ class WxDataProcessor {
 
         await sendChats(chat, wxChatUser, formattedResponse, cleanupString(preMsg))
 
-        debugLog("wxfUserData.wxfData: " + JSON.stringify(wxfUserData.wxfData, null, 3))
+        //debugLog("wxfUserData.wxfData: " + JSON.stringify(wxfUserData.wxfData, null, 3))
 
       } else {
         preMsg = `Your current location is set to: Label=${wxChatUser.location.label} (Location=${wxChatUser.location.value})`
@@ -1765,6 +1749,8 @@ class WxDataProcessor {
         await sendMessage(chat, wxChatUser, HELP_LOCATION_MSG)
       } else if (qualified_msg.msg_criteria === "shortcuts") {
         await sendMessage(chat, wxChatUser, HELP_SHORTCUTS_MSG)
+      } else if (qualified_msg.msg_criteria === "disclaimer") {
+        await sendMessage(chat, wxChatUser, DISCLAIMER_MSG)
       } else if (qualified_msg.msg_criteria === "adminhost" && (wxChatUser.chattyType === "host" || wxChatUser.chattyType === "admin")) {
         await sendMessage(chat, wxChatUser, HELP_ADMINHOST_MSG)
       } else {
