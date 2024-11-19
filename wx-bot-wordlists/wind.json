@@ -1,5 +1,5 @@
 {
-  "generalWords": ["wind", "windy", "gusts", "gusty"],
+  "generalWords": ["wind", "windy", "gusts", "gusty", "gusting"],
   "specificCriteria": [
     {
       "label": "no wind",

@@ -22,7 +22,7 @@
     },
     {
       "label": "setting location (city, state)",
-      "regex": "\\b(?:set\\s+)?(?:location\\s+)?(?:to\\s+)?([A-Za-z]+(?:\\s+(?!set|to|is|as)[A-Za-z]+)*,\\s*[A-Za-z]{2})\\b",
+      "regex": "\\b(?:set\\s+)?(?:location\\s+)?(?:(?:to|is|as)\\s+)?([A-Za-z]+(?:\\s+(?!set|to|is|as)[A-Za-z]+)*,\\s*[A-Za-z]{2})\\b",
       "parameter": "loc-city:"
     },
     {

@@ -22,7 +22,9 @@
         "extreme",
         "tornado",
         "hurricane",
-        "snow"
+        "snow",
+        "severe",
+        "warning"
       ]
     }
   ]
