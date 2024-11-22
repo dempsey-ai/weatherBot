@@ -37,7 +37,9 @@ const debugLog = (msg) => {
   return
 }
 
-const { WX_DATA_TYPES, WX_CAPABILITIES, WX_PERIOD_RESOLUTION } = require('./wx-provider-types')
+//const { WX_DATA_TYPES, WX_CAPABILITIES, WX_PERIOD_RESOLUTION } = require('./wx-provider-types')
+const { WX_DATA_TYPES, WX_CAPABILITIES, WX_PERIOD_RESOLUTION  } = require('./wx-provider-utils');
+
 const { WxDay, WxPeriod, WxDataNormalizer } = require('./wx-data-normalizer')
 
 const provWeatherGov = {

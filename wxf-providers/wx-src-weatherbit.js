@@ -1,6 +1,8 @@
 const axios = require("axios").default;
 const cfg = require("../wx-bot-config");
-const { WX_DATA_TYPES, WX_CAPABILITIES, WX_PERIOD_RESOLUTION } = require('./wx-provider-types');
+//const { WX_DATA_TYPES, WX_CAPABILITIES, WX_PERIOD_RESOLUTION } = require('./wx-provider-types');
+//const { WX_DATA_TYPES, WX_CAPABILITIES, WX_PERIOD_RESOLUTION, findMaxNumInStr, axiosLoop_geoCode, axiosLoop } = require('./wx-provider-utils');
+const { WX_DATA_TYPES, WX_CAPABILITIES, WX_PERIOD_RESOLUTION  } = require('./wx-provider-utils');
 
 // Debug logging helper
 const debugLog = (msg) => {

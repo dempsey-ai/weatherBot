@@ -135,35 +135,97 @@ class WxDataNormalizer {
         return parseInt(match[1]);
       }
     }
-    return null;
+    return 0;
   }
+
+
+  static extractGustFromDescription (description) {
+    if (!description) return 0
+
+    const gustPatterns = [/gusts as high as (\d+)/i, /gusting to (\d+)/i, /gusts up to (\d+)/i, /wind gusts (\d+)/i]
+
+    for (const pattern of gustPatterns) {
+      const match = description.match(pattern)
+      if (match) {
+        return parseInt(match[1])
+      }
+    }
+
+    return 0
+  }
+
 
   // Main normalization method
   static normalize(wxfProv) {
     const currentDate = new Date(wxfProv.periods[0].date + 'T00:00:00');
 
-    // Group periods by date first
+    // First create the day map with initial values
     const dayMap = new Map();
-    
     wxfProv.periods.forEach(period => {
       const date = period.date;
       if (!dayMap.has(date)) {
         dayMap.set(date, {
           periods: [],
-          high: -Infinity,
-          low: Infinity
+          high: null,
+          low: null
         });
       }
-      
-      const dayData = dayMap.get(date);
-      dayData.periods.push(period);
-      
-      // Track high/low temps
-      if (period.temperature.value !== undefined) {
-        dayData.high = Math.max(dayData.high, period.temperature.value);
+      dayMap.get(date).periods.push(period);
+    });
+
+    // First loop - handle DAILY resolution and single-period days
+    dayMap.forEach((dayData, date) => {
+      if (wxfProv.metadata.provider.periodResolution === 'DAILY' || dayData.periods.length === 1) {
+        let highTemp = -Infinity;
+        let lowTemp = Infinity;
+        
+        dayData.periods.forEach(period => {
+          if (period.temperature) {
+            // Check for high temp from value
+            if (period.temperature.value !== undefined && period.temperature.value !== null) {
+              highTemp = Math.max(highTemp, period.temperature.value);
+            }
+            
+            // Check for low temp from either low property or value for nighttime
+            if (period.temperature.low !== undefined && period.temperature.low !== null) {
+              lowTemp = Math.min(lowTemp, period.temperature.low);
+            } else if (!period.isDaytime && period.temperature.value !== undefined && period.temperature.value !== null) {
+              lowTemp = Math.min(lowTemp, period.temperature.value);
+            }
+          }
+        });
+        
+        dayData.high = highTemp === -Infinity ? null : highTemp;
+        dayData.low = lowTemp === Infinity ? null : lowTemp;
       }
-      if (period.temperature.low !== undefined) {
-        dayData.low = Math.min(dayData.low, period.temperature.low);
+    });
+
+    // Second loop - process multi-period days for non-DAILY resolution
+    dayMap.forEach((dayData, date) => {
+      if (wxfProv.metadata.provider.periodResolution !== 'DAILY' && dayData.periods.length > 1) {
+        let highTemp = -Infinity;
+        let lowTemp = Infinity;
+        
+        dayData.periods.forEach(period => {
+          if (period.temperature) {
+            // Handle high temp from daytime periods
+            if (period.temperature.value !== undefined && period.temperature.value !== null) {
+              if (period.isDaytime) {
+                highTemp = Math.max(highTemp, period.temperature.value);
+              }
+            }
+
+            // Handle low temp from either explicit low or nighttime value
+            if (period.temperature.low !== undefined && period.temperature.low !== null) {
+              lowTemp = Math.min(lowTemp, period.temperature.low);
+            } else if (!period.isDaytime && period.temperature.value !== undefined && period.temperature.value !== null) {
+              lowTemp = Math.min(lowTemp, period.temperature.value);
+            }
+          }
+        });
+        
+        dayData.high = highTemp === -Infinity ? null : highTemp;
+        dayData.low = lowTemp === Infinity ? null : lowTemp;
       }
     });
 
@@ -189,6 +251,11 @@ class WxDataNormalizer {
           startTime: period.startTime,
           endTime: period.endTime,
           temperature: this.roundNumber(period.temperature.value),
+          temperatures: {
+            value: period.temperature.value ? this.roundNumber(period.temperature.value) : null,
+            low: period.temperature.low ? this.roundNumber(period.temperature.low) : null,
+            feelsLike: period.temperature.feelsLike ? this.roundNumber(period.temperature.feelsLike) : null
+          },
           description: provDescription,
           conditions: {
             precipitation: {
@@ -198,11 +265,11 @@ class WxDataNormalizer {
               type: period.conditions.precipitation.type
             },
             wind: {
-              speed: this.roundNumber(period.conditions.wind.speed) || 
+              speed: period.conditions.wind.speed ? this.roundNumber(period.conditions.wind.speed) : 
                      this.extractWindFromDescription(period.conditions.description),
-              gust: period.conditions.wind.gust ? 
-                    this.roundNumber(period.conditions.wind.gust) : undefined,
-              direction: period.conditions.wind.direction
+              gust: period.conditions.wind.gust ? this.roundNumber(period.conditions.wind.gust) : 
+                     this.extractGustFromDescription(period.conditions.description),
+              direction: period.conditions.wind.direction || null
             },
             atmospheric: period.conditions.atmospheric ? {
               visibility: this.roundNumber(period.conditions.atmospheric.visibility),

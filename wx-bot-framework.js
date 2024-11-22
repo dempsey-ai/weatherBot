@@ -1439,7 +1439,7 @@ class WxDataProcessor {
           else if (this.periodResolution === WX_PERIOD_RESOLUTION.TWELVE_HOUR) {
             // Sort periods to ensure 'day' comes before 'night'
             const sortedPeriods = [...day.periods].sort((a, b) => 
-              a.isDaytime === false ? 1 : -1
+              a.isDaytime === true ? -1 : 1
             )
             
             sortedPeriods.forEach(period => {
@@ -1533,16 +1533,22 @@ class WxDataProcessor {
 
     days.forEach(day => {
       // Format string with color coding
-      let formattedString = `${chatTeal(day.dayInfo.enhancedName)} (hi: `
+      let formattedString = `${chatTeal(day.dayInfo.enhancedName)} (`
 
-      // Add color to high temperature if it exceeds tempHot
-      if (day.temperatures.high > cfg.appConfig.tempHot) {
-        formattedString += chatYellow(`${day.temperatures.high}°`)
-      } else {
-        formattedString += `${day.temperatures.high}°`
+      if (day.temperatures.high !== undefined && day.temperatures.high !== null) {
+        // Add color to high temperature if it exceeds tempHot
+        if (day.temperatures.high > cfg.appConfig.tempHot) {
+          formattedString += `hi: ${chatYellow(`${day.temperatures.high}°`)}`
+        } else {
+          formattedString += `hi: ${day.temperatures.high}°`
+        }
       }
 
-      formattedString += `, night: `
+      if (day.temperatures.low !== undefined && day.temperatures.low !== null) {
+        if (formattedString.includes("hi:")) {
+          formattedString += `, `
+        }
+        formattedString += `night: `
       
       // Add color to low temperature if it's below tempCold
       if (day.temperatures.low < cfg.appConfig.tempCold) {
@@ -1550,12 +1556,12 @@ class WxDataProcessor {
       } else {
         formattedString += `${day.temperatures.low}°`
       }
-      
+    }
       formattedString += ")"
 
       formattedData.push(cleanupString(formattedString))
     })
-
+  
     return formattedData
   }
 
@@ -1573,7 +1579,7 @@ class WxDataProcessor {
       else if (this.periodResolution === WX_PERIOD_RESOLUTION.TWELVE_HOUR) {
         // Sort periods to ensure 'day' comes before 'night'
         const sortedPeriods = [...day.periods].sort((a, b) => 
-          a.timeOfDay === 'night' ? 1 : -1
+          a.isDaytime === true ? -1 : 1
         )
         
         sortedPeriods.forEach(period => {
