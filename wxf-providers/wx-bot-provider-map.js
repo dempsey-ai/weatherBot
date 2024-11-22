@@ -1,3 +1,17 @@
+/*
+weatherBot chat client - version 1.0 - Uses SimpleX Chat frameworkto provide weather forecast reports to user messages
+    Copyright (C) 2024  Scott Dempsey
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as published
+    by the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Affero General Public License for more details.
+*/
 // THIS FILE CONTAINS THE MAP OF THE WEATHER DATA PROVIDERS AND THE FUNCTIONS THAT FETCH THE WEATHER DATA FROM THE PROVIDERS FOR THE BOT FRAMEWORK
 
 // THE PROVIDERS COULD BE:

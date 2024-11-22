@@ -1,17 +1,31 @@
-// PROVIDER: weather.gov
-// API: NOAA's NWS Weather Forecast API
-// URL: https://api.weather.gov/
-// DOCUMENTATION: https://www.weather.gov/documentation/services-web-api
-// OPEN SOURCE CODE: https://github.com/benjamintatum/wx-api
+/*
+weatherBot chat client - version 1.0 - Uses SimpleX Chat frameworkto provide weather forecast reports to user messages
+    Copyright (C) 2024  Scott Dempsey
 
-// WEATHER DATA:
-// SAMPLE RAW DATA: https://api.weather.gov/gridpoints/PUB/82,92/forecast
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as published
+    by the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
 
-// REQUIREMENTS:
-// 1. GET THE LAT/LON DIRECTLY OR CONVERTED FROM THE USER'S MESSAGE WHICH COULD BE IN THE FORM OF AN CITY, STATE, or ZIP CODE, or LAT/LON
-// 2. USE THE LAT/LON TO BUILD THE WEATHER.GOV API URL TO FETCH THE WEATHER DATA FOR THE LOCATION
-// 3. CONVERT THE RAW WEATHER DATA TO THE STANDARD WEATHER SOURCE FORMAT FOR THE BOT FRAMEWORK
-
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Affero General Public License for more details.
+*/
+/* PROVIDER: weather.gov
+   API: NOAA's NWS Weather Forecast API
+   URL: https://api.weather.gov/
+   DOCUMENTATION: https://www.weather.gov/documentation/services-web-api
+   OPEN SOURCE CODE: https://github.com/benjamintatum/wx-api
+   
+   WEATHER DATA:
+   SAMPLE RAW DATA: https://api.weather.gov/gridpoints/PUB/82,92/forecast
+   
+   REQUIREMENTS:
+   1. GET THE LAT/LON DIRECTLY OR CONVERTED FROM THE USER'S MESSAGE WHICH COULD BE IN THE FORM OF AN CITY, STATE, or ZIP CODE, or LAT/LON
+   2. USE THE LAT/LON TO BUILD THE WEATHER.GOV API URL TO FETCH THE WEATHER DATA FOR THE LOCATION
+   3. CONVERT THE RAW WEATHER DATA TO THE STANDARD WEATHER SOURCE FORMAT FOR THE BOT FRAMEWORK
+*/
 
 const cfg = require("../wx-bot-config");
 //const { WX_DATA_TYPES, WX_CAPABILITIES, WX_PERIOD_RESOLUTION } = require('./wx-provider-types');
