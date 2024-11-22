@@ -7,7 +7,7 @@
 
 // CURRENTLY IMPLEMENTED PROVIDERS:
 // 1. weather.gov
-const weatherGov = require("./wx-src-weathergov-new")
+const weatherGov = require("./wx-src-weathergov")
 // 2. weatherbit.io
 const weatherBit = require("./wx-src-weatherbit")
 
@@ -358,10 +358,10 @@ const wxWbitFunctions = {
 }
 
 // To use weatherbit.io provider, uncomment this line:
-//const activeProvider = wxWbitFunctions
+const activeProvider = wxWbitFunctions
 
 // Currently using weather.gov provider:
-const activeProvider = wxWgovFunctions
+//const activeProvider = wxWgovFunctions
 
 
 module.exports = {activeProvider}

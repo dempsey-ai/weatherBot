@@ -1,3 +1,15 @@
+/* PURPOSE:
+   This file contains 
+      1. Provider type metadata that drives code logic
+      2. Utility functions used by the weather providers to reduce code duplication
+   Summary of utility functions: 
+        function to find the maximum number in a string, 
+        a sleep function, 
+        and an axiosLoop function which is used to contact external API providers
+             and handle special throttling issues
+             as well as provide a limited retry loop to deal with occasional denial of service issues
+*/
+
 const axios = require("axios").default;
 const cfg = require("../wx-bot-config");
 
@@ -52,8 +64,15 @@ const sleep = async (manySecs) => {
     * which can then be used in other weather provider API
     * it has unique handling for throttling issues of it's API
     */
-const axiosLoop_geoCode = async (infoText = "", thisURL, keepTrying, checkThrottled) => {
-    debugLog("axiosLoop_geoCode function called...")
+    /**
+    * @param {string} infoText - Description of the API call for logging
+    * @param {string} thisURL - The URL to call
+    * @param {boolean} [keepTrying=false] - Whether to retry on failure
+    * @param {boolean} [checkThrottled=false] - Whether to check for geoCode API specific throttling errors in response
+    *   - Note: this is formatted for geoCode API calls which is used to return lat/lon from a location string to build other strings
+    */
+    const axiosLoop = async (infoText = "", thisURL, keepTrying = false, checkThrottled = false) => {
+    debugLog("axiosLoop function called..."+infoText)
     debugLog("trying URL: " + thisURL)
     let retVal = ""
     let response = ""
@@ -69,28 +88,27 @@ const axiosLoop_geoCode = async (infoText = "", thisURL, keepTrying, checkThrott
 
         if (response.status >= 500 && response.status < 600) {
             gotResponse = false
-          } else {
+          } else if (checkThrottled){
             let isThrottled = JSON.parse(response.data)
-            if (checkThrottled && /(throttled)/.test(isThrottled.latt.toLowerCase())) {
+              if ( /(throttled)/.test(isThrottled.latt.toLowerCase())) {
               debugLog("isThrottled geoCode issue...." + JSON.stringify(isThrottled, null, 3))
               throw "axios geoCode throttle issue happened"
-            } // generates an exception
+              }} // generates an exception
             else {
               gotResponse = true}  //no throttle issue and we have a response
-          }
       } catch (err) {
-        debugLog("in axiosLoop_geoCode catch..." + i)
+        debugLog("in axiosLoop catch..." + i)
         if (err.response !== undefined) {
           debugLog(err.response.data.error)
         } else {
-          debugLog("in axiosLoop_geoCode catch err..." + err)
+          debugLog("in axiosLoop catch err..." + err)
         }
       }
 
       if (gotResponse || !keepTrying) break
 
       if (i == 9) {
-        ErrorMsg = "Failed after maximum retries"
+        ErrorMsg = "Failed after maximum axios loop retries"
       }
       
       await sleep(keepTrying ? (i < 5 ? 1.1 : 5) : 0)   //progressively longer sleep times to help with throttling timers
@@ -112,59 +130,11 @@ const axiosLoop_geoCode = async (infoText = "", thisURL, keepTrying, checkThrott
   }
 
 
-const axiosLoop = async (infoText = "", thisURL, keepTrying) => {
-    let retVal = ""
-    let response = ""
-    let gotResponse = false
-    let ErrorMsg = infoText + " API error, please try again"
-
-
-    for (var i = 0; i < 10; i++) {
-      try {
-        response = await axios.get(thisURL, {
-          responseType: "json",
-          transformResponse: [(v) => v],
-        })
-
-        if (response.status >= 500 && response.status < 600) {
-          gotResponse = false
-        } else {
-          gotResponse = true
-        }
-      } catch (err) {
-        debugLog(err)
-        gotResponse = false
-      }
-      if (gotResponse || !keepTrying) {
-        break
-      }
-      debugLog("Trying "+infoText+" again loop..." + i)
-      if (i == 9) {
-        ErrorMsg = "final "+infoText+" fail...looping out of max retries"
-      }
-      await sleep(keepTrying ? (i < 5 ? 1.1 : 5) : 0)   //progressively longer sleep times to help with throttling timers
-
-    } //end loop
-    if (!gotResponse) {
-      return {isValid: false, errMsg: ErrorMsg, jsonData: undefined}
-    }
-
-
-    try {
-      retVal = JSON.parse(response.data)
-    } catch (err) {
-    console.log("Error parsing "+infoText+" json response: " + err)
-      return {isValid: false, errMsg: "Error parsing "+infoText+" response", jsonData: undefined}
-    }
-
-    return {isValid: true, jsonData: retVal}
-}
 
 module.exports = {
   WX_DATA_TYPES,
   WX_PERIOD_RESOLUTION,
   WX_CAPABILITIES,
   findMaxNumInStr,
-  axiosLoop_geoCode,
   axiosLoop
 };

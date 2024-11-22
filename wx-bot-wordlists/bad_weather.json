@@ -5,7 +5,6 @@
       "label": "Bad Weather Words",
       "regex": "",
       "parameter": [
-        "gusts",
         "ice",
         "icing",
         "sleet",
@@ -22,7 +21,6 @@
         "extreme",
         "tornado",
         "hurricane",
-        "snow",
         "severe",
         "warning"
       ]

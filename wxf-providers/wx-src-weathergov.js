@@ -12,61 +12,298 @@
 // 2. USE THE LAT/LON TO BUILD THE WEATHER.GOV API URL TO FETCH THE WEATHER DATA FOR THE LOCATION
 // 3. CONVERT THE RAW WEATHER DATA TO THE STANDARD WEATHER SOURCE FORMAT FOR THE BOT FRAMEWORK
 
-// PROVIDER MAP CLEAN DATA TEMPLATE:
-/*
-  wxfTemplate: [{
-    geoID: '', 
-    geoType: '',
-    refDateTimeInt: 0, 
-    wxfPeriod: [
-      { wxfPeriod: {},  asofStamp: {}, wxfDayName: {},   wxfWindSpeed: {}, 
-        wxfPrecip: {},  wxfTemp: {},   wxfIsDaytime: {}, wxfDescr: {}, 
-        refDayName: {}, refBadFlag: {} 
-      }]  
-  }],
-*/
 
-const axios = require("axios").default
-const badWeatherData = require("../wx-bot-wordlists/bad_weather.json")
+const cfg = require("../wx-bot-config");
+//const { WX_DATA_TYPES, WX_CAPABILITIES, WX_PERIOD_RESOLUTION } = require('./wx-provider-types');
+const { WX_DATA_TYPES, WX_CAPABILITIES, WX_PERIOD_RESOLUTION, findMaxNumInStr, axiosLoop } = require('./wx-provider-utils');
 
-const cfg = require("../wx-bot-config")
 const debugLog = (msg) => {
   if (cfg.appConfig.isDebug) {
-    console.log(msg)
+    console.log(msg);
   }
-  return
-}
+};
 
-//const { WX_DATA_TYPES, WX_CAPABILITIES, WX_PERIOD_RESOLUTION } = require('./wx-provider-types')
-const { WX_DATA_TYPES, WX_CAPABILITIES, WX_PERIOD_RESOLUTION  } = require('./wx-provider-utils');
-
-const { WxDay, WxPeriod, WxDataNormalizer } = require('./wx-data-normalizer')
+const WB_BAD_WEATHER_CODES = undefined;
 
 const provWeatherGov = {
   providerName: "weather.gov",
   providerType: WX_DATA_TYPES.MULTI_PERIOD,
   periodResolution: WX_PERIOD_RESOLUTION.TWELVE_HOUR,
-  capabilities: [WX_CAPABILITIES.ALERTS, WX_CAPABILITIES.POLYGONS],
-  provGeoData: [
-    {
-      geoID: "80809",
-      geoType: "loc-zip",
-      geoData: "80809",
-      forecast: "https://api.weather.gov/gridpoints/PUB/84,95/forecast",
-      alert: "https://api.weather.gov/alerts?point=38.91181%2C-104.98553&status=actual&message_type=alert",
-      polyMapURL: "",
-    },
-    {
-      geoID: "pikespeak",
-      geoType: "loc-gps",
-      geoData: "38.8408655,-105.0441532",
-      forecast: "https://api.weather.gov/gridpoints/PUB/82,92/forecast",
-      alert: "https://api.weather.gov/alerts?point=38.8408655%2C-105.0441532&status=actual&message_type=alert",
-      polyMapURL: "",
-    },
-  ],
+  capabilities: {
+    hasAlerts: true,
+    hasPolygons: true,
+    hasPrecipAmount: false,
+    hasHourlyData: false,
+    useEnhancedDescription: false,
+    hasCodesForBadFlag: false,
+    badWeatherCodes: WB_BAD_WEATHER_CODES || [-1]
+  },
 
+  timeLimit: 3600000 * 1, // 1 hour cache
   provCacheData: [],
+  provGeoData: [],
+
+  // Placeholder enhanced description (not used by weather.gov)
+  createEnhancedDescription: () => "",
+
+  // Convert raw weather.gov data to wxfProv format
+  normalizeToWxfProv: (rawData, location) => {
+    const currentDate = new Date();
+    let firstPeriodIsNight = false;
+
+    const periods = rawData.properties.periods.map((period, index) => {
+      // Parse dates consistently - get local date from startTime without timezone conversion
+      let date = period.startTime.split('T')[0];
+      let periodDate = new Date(date + 'T00:00:00');  // Create Date object at start of day to avoid timezone issues
+
+      // Check for prior night condition on first period only
+      if (index === 0) {
+        firstPeriodIsNight = currentDate.getHours() < 6 && 
+                            !period.isDaytime && 
+                            periodDate.toISOString().split('T')[0] === currentDate.toISOString().split('T')[0];
+        
+        if (firstPeriodIsNight) {
+          periodDate.setDate(periodDate.getDate() - 1);
+          periodDate.setHours(18, 0, 0, 0);
+          date = periodDate.toISOString().split('T')[0];
+        }
+      }
+
+      return {
+        date,     //date of period is a challenge with weather.gov, hence the custom code above
+        isDaytime: period.isDaytime,  
+        startTime: periodDate,   //startTime of period is a challenge with weather.gov, hence the custom code above
+        endTime: period.endTime,
+        temperature: {
+          value: period.isDaytime ? period.temperature : undefined,
+          low: period.isDaytime ? undefined : period.temperature,
+          feelsLike: undefined
+        },
+        conditions: {
+          description: period.detailedForecast,    //weather.gov has a good description already, can use as is
+          enhancedDescription: "",   //not needed with weather.gov
+          precipitation: {
+            probability: period.probabilityOfPrecipitation?.value ?? 0,
+            amount: undefined,
+            type: undefined
+          },
+          wind: {
+            speed: findMaxNumInStr(period.windSpeed),  //normalizer will extract from description if not incl from provider
+            gust: undefined, //normalizer will extract from description if not incl from provider
+            direction: period.windDirection
+          },
+          atmospheric: {
+            visibility: undefined,
+            humidity: undefined,
+            pressure: undefined,
+            dewpoint: undefined,
+            uvIndex: undefined
+          }
+        },
+        astronomy: {
+          sunrise: undefined,
+          sunset: undefined,
+          moonPhase: undefined
+        },
+        flags: {
+          isBadWeather: false
+        }
+      };
+    });
+
+    return {
+      metadata: {
+        provider: {
+          name: provWeatherGov.providerName,
+          type: provWeatherGov.providerType,
+          periodResolution: provWeatherGov.periodResolution,
+          capabilities: provWeatherGov.capabilities,
+          dataCharacteristics: {
+            temperaturesPerPeriod: 1
+          }
+        },
+        location: {
+          timezone: "MDT",  // Standard timezone code
+          wxfURL: location.wxfURL
+        },
+        generated: {
+          timestamp: new Date().toISOString(),
+          validUntil: new Date(Date.now() + provWeatherGov.timeLimit).toISOString()
+        }
+      },
+      periods
+    };
+  },
+
+
+  createGeoData: async (locLabel, geoType, geoData) => {
+    let retGeoData = {
+      geoID: locLabel,
+      geoType: geoType,
+      geoData: geoData,
+      forecast: "",
+      alert: "",
+      polyMapURL: "",
+      providerType: provWeatherGov.providerType,
+      periodResolution: provWeatherGov.periodResolution
+    }
+
+    let geoLatLon = {}
+    let geoGPS = ""
+    const keepTrying = true
+    const checkThrottled = true
+
+    if (geoType == "loc-gps") {
+      //split into lat and long
+      const geoSplit = geoData.toLowerCase().split(",")
+      geoLatLon.latt = geoSplit[0]
+      geoLatLon.longt = geoSplit[1]
+    } else if (geoType == "loc-city") {
+      debugLog("https://geocode.xyz/" + geoData + "?region=us&json=1")
+
+      geoLatLon = await axiosLoop("geoCode", "https://geocode.xyz/" + geoData + "?region=us&json=1", keepTrying, checkThrottled)
+    } else if (geoType == "loc-zip") {
+      debugLog("https://geocode.xyz/" + geoData + "?region=us&json=1")
+
+      geoLatLon = await axiosLoop("geoCode", "https://geocode.xyz/" + geoData + "?region=us&json=1", keepTrying, checkThrottled)
+    }
+
+    if (!geoLatLon.isValid) {
+      return {isValid: false, errMsg: geoLatLon.errMsg, newGeoID: undefined}
+    }
+
+    const wxaURL = "https://api.weather.gov/alerts?point=" + geoLatLon.jsonData.latt + "%2C" + geoLatLon.jsonData.longt + "&status=actual&message_type=alert"
+
+    let gpsURL = "https://api.weather.gov/points/" + geoLatLon.jsonData.latt + "," + geoLatLon.jsonData.longt
+    debugLog(gpsURL)
+
+    geoGPS = await axiosLoop("weather.gov", gpsURL, keepTrying)
+
+    if (!geoGPS.isValid) {
+      return {isValid: false, errMsg: geoGPS.errMsg, newGeoID: undefined}
+    }
+
+    retGeoData = {
+      geoID: locLabel,
+      geoType: geoType,
+      geoData: geoData,
+      forecast: geoGPS.jsonData.properties.forecast,
+      alert: wxaURL,
+      polyMapURL: "",
+    }
+
+    return {isValid: true, newGeoID: retGeoData}
+  },
+
+  getWXF: async (wxfURL, forceRefresh = false, keepTrying = true) => {
+    if (!wxfURL?.startsWith('https://api.weather.gov/')) {
+      return {
+        isValid: false, 
+        errMsg: "Invalid weather.gov URL",
+        wxfData: undefined
+      };
+    }
+    
+    let freshWeatherResults = undefined //used for wxfURL results pre parsing
+
+    // Check cache first
+    const nowDate = new Date()
+    const nowMidnight = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate()).getTime()
+  
+    if (!forceRefresh) {
+      const cached = provWeatherGov.provCacheData.find(c => c.metadata.location.wxfURL === wxfURL);
+      if ((cached && ((Date.now() - new Date(cached.metadata.generated.timestamp).getTime()) < provWeatherGov.timeLimit)) &&
+      (Date.now() - nowMidnight > provWeatherGov.timeLimit))  // startdate driven logic...Force refresh if cache is prior to midnight
+       {debugLog("using Cache for rate limiting")
+        return { isValid: true, wxfData: cached };
+      }
+     }
+
+    debugLog("Not using Cache, now going to reach out to Weather.gov...")
+    //no cache or out of date, flush it before adding current get
+
+    freshWeatherResults = await axiosLoop("weather.gov", wxfURL, keepTrying)
+
+    if (!freshWeatherResults.isValid) {
+      return {isValid: false, errMsg: freshWeatherResults.errMsg, wxfData: undefined}
+    }
+            /*debugLog(`
+  
+  
+            =========== freshWeatherResults.data ==================
+            ${JSON.stringify(freshWeatherResults, null, 3)}`);*/
+            
+
+    if ((freshWeatherResults.jsonData.properties.periods == undefined ? 0 : freshWeatherResults.jsonData.properties.periods.length) == 0)
+      return {isValid: false, errMsg: "no periods returned from weather.gov", wxfData: undefined}
+
+    let cacheTime = Date.now()
+
+    const wxfProv = provWeatherGov.normalizeToWxfProv(freshWeatherResults.jsonData, wxfURL);
+
+    provWeatherGov.provCacheData = provWeatherGov.provCacheData.filter(c => 
+        c.metadata.location.wxfURL !== wxfURL );
+
+    provWeatherGov.provCacheData.push(wxfProv);
+  
+    return { isValid: true, wxfData: wxfProv };       
+        
+  }, //end of function
+
+
+
+  getWXA: async (PwxaURL, keepTrying = true) => {
+    let wxfURL = ""
+    if (!PwxaURL || typeof PwxaURL !== 'string' || !PwxaURL.startsWith('https://api.weather.gov/alerts?')) {
+      return {isValid: false, errMsg: "Invalid or missing alerts URL. Must be a valid weather.gov API URL", wxfData: undefined}
+    }
+    else {
+      wxfURL = PwxaURL
+    }
+
+    let freshWeatherResults = undefined //used for wxfURL results pre parsing
+
+    let wxaFlat = []
+
+    debugLog("Never hold Alert Cache, now going to reach out to Weather.gov for..." + wxfURL)
+    //no cache or out of date, flush it before adding current get
+    
+    freshWeatherResults = await axiosLoop("weather.gov", wxfURL, keepTrying)
+
+    if (!freshWeatherResults.isValid) {
+      return {isValid: false, errMsg: freshWeatherResults.errMsg, wxaData: []}
+    }
+
+
+    if ((freshWeatherResults.jsonData.features == undefined ? 0 : freshWeatherResults.jsonData.features.length) == 0) {
+      return {isValid: true, Msg: "no alerts returned from weather.gov", wxaData: []}
+    }
+
+    let cacheTime = Date.now()
+    debugLog("cacheTime...." + cacheTime)
+    let validWeather = []
+    freshWeatherResults.jsonData.features.forEach(function (pedValue, pedKey) {
+      const wxaFlat = {
+        wxfPeriod: pedKey,
+        wxfDayName: pedValue.properties.expires,
+        wxfDescr: pedValue.properties.description,
+        refDayName: "expires: " + pedValue.properties.expires,
+        doReport: provWeatherGov.alertIsCurrent[">="](pedValue.properties.expires),
+        formatted:
+          "expires: " +
+          provWeatherGov.formatDateTime(pedValue.properties.expires) +
+          " - " +
+          pedValue.properties.headline +
+          " \n" +
+          pedValue.properties.description,
+      }
+      if (wxaFlat.doReport) {
+        validWeather.push(wxaFlat)
+      }
+    }) // end of forEach loop
+
+    return {isValid: true, wxaData: validWeather}
+  }, //end of function
 
   formatDateTime: (isoString) => {
     const date = new Date(isoString)
@@ -84,55 +321,6 @@ const provWeatherGov = {
     return date.toLocaleString("en-US", options)
   },
 
-
-  extractGustSpeed: (detailedForecast) => {
-    if (!detailedForecast) return 0
-
-    const gustPatterns = [/gusts as high as (\d+)/i, /gusting to (\d+)/i, /gusts up to (\d+)/i, /wind gusts (\d+)/i]
-
-    for (const pattern of gustPatterns) {
-      const match = detailedForecast.match(pattern)
-      if (match) {
-        return parseInt(match[1])
-      }
-    }
-
-    return 0
-  },
-
-  extractInteger: (value) => {
-    if (value === null || value === undefined) {
-      return 0
-    }
-    const match = String(value).match(/\d+/)
-    return match ? parseInt(match[0]) : 0
-  },
-
-  extractWindSpeed: (windSpeedString) => {
-    if (windSpeedString === null || windSpeedString === undefined) {
-      return 0
-    }
-    const matches = windSpeedString.match(/\d+/g)
-    return matches ? parseInt(matches[matches.length - 1]) : 0
-  },
-
-  getDayOfWeekInt: (dayName) => {
-    const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
-    const index = days.findIndex((day) => dayName.toLowerCase().includes(day.toLowerCase()))
-    return index !== -1 ? index + 1 : -1 // Adding 1 to make Sunday 1 and Saturday 7
-  },
-
-  timeLimit: 3600000 * 1, // = 60min   //1702555872762 - 1702519101950
-
-  milliseconds: Date.now(), //1702555872762 - 1702519101950
-
-  formatTime: (milliseconds) => {
-    const seconds = Math.floor((milliseconds / 1000) % 60)
-    const minutes = Math.floor((milliseconds / 1000 / 60) % 60)
-    const hours = Math.floor((milliseconds / 1000 / 60 / 60) % 24)
-
-    return [hours.toString().padStart(2, "0"), minutes.toString().padStart(2, "0"), seconds.toString().padStart(2, "0")].join(":")
-  },
 
   alertIsCurrent: {
     ">=": function (expireISOdate) {
@@ -159,311 +347,8 @@ const provWeatherGov = {
     },
   }, //end var/function
 
-  sleep: async (manySecs) => {
-    return new Promise((resolve) => {
-      setTimeout(resolve, manySecs * 1000)
-    })
-  },
 
-  axiosLoop: async (wxfURL, keepTrying, checkThrottled) => {
-    let retVal = ""
-    let response = ""
-    let gotResponse = false
-    for (var i = 0; i < 10; i++) {
-      try {
-        response = await axios.get(wxfURL, {
-          responseType: "json",
-          transformResponse: [(v) => v],
-        })
-        gotResponse = true
-        let isThrottled = JSON.parse(response.data)
-
-        if (checkThrottled && /(throttled)/.test(isThrottled.latt.toLowerCase())) {
-          debugLog("isThrottled stuff...." + JSON.stringify(isThrottled, null, 3))
-          throw "Throttle issue happened"
-        } // generates an exception
-      } catch (err) {
-        debugLog("in catch..." + i)
-        if (err.response !== undefined) {
-          debugLog(err.response.data.error)
-        } else {
-          debugLog("in catch err..." + err)
-        }
-
-        gotResponse = false
-        //return {result: wxErrorMsg, wxfData: undefined}
-      }
-      if (gotResponse || !keepTrying) {
-        break
-      }
-      debugLog("Trying axios call again loop..." + i)
-      if (i == 9) {
-        ErrorMsg = "final axios URL fail...looping out of max retries"
-      }
-      if (keepTrying && i < 5) {
-        await provWeatherGov.sleep(1.1)
-      } else if (keepTrying) {
-        await provWeatherGov.sleep(5)
-      }
-    } //end loop
-    if (!gotResponse) {
-      return {result: ErrorMsg, wxfData: undefined}
-    }
-
-    retVal = JSON.parse(response.data)
-
-    return retVal
-  },
-
-  createGeoData: async (locLabel, geoType, geoData) => {
-    let retGeoData = {
-      geoID: locLabel,
-      geoType: geoType,
-      geoData: geoData,
-      forecast: "",
-      alert: "",
-      polyMapURL: "",
-      providerType: provWeatherGov.providerType,
-      periodResolution: provWeatherGov.periodResolution
-    }
-
-    let result = "ok"
-    let ErrorMsg = "something wrong, do better"
-    let preMsg = "these are the settings used to compose response"
-    let reply = "something failed"
-    let geoLatLon = {}
-    let geoGSP = ""
-    let response = ""
-
-    if (geoType == "loc-gps") {
-      //split into lat and long
-      const geoSplit = geoData.toLowerCase().split(",")
-      geoLatLon.latt = geoSplit[0]
-      geoLatLon.longt = geoSplit[1]
-    } else if (geoType == "loc-city") {
-      debugLog("https://geocode.xyz/" + geoData + "?region=us&json=1")
-
-      geoLatLon = await provWeatherGov.axiosLoop("https://geocode.xyz/" + geoData + "?region=us&json=1", true, true)
-    } else if (geoType == "loc-zip") {
-      debugLog("https://geocode.xyz/" + geoData + "?region=us&json=1")
-
-      geoLatLon = await provWeatherGov.axiosLoop("https://geocode.xyz/" + geoData + "?region=us&json=1", true, true)
-    }
-
-    const wxaURL = "https://api.weather.gov/alerts?point=" + geoLatLon.latt + "%2C" + geoLatLon.longt + "&status=actual&message_type=alert"
-
-    let gspURL = "https://api.weather.gov/points/" + geoLatLon.latt + "," + geoLatLon.longt
-    debugLog(gspURL)
-
-    geoGSP = await provWeatherGov.axiosLoop(gspURL, true, false)
-
-    retGeoData = {
-      geoID: locLabel,
-      geoType: geoType,
-      geoData: geoData,
-      forecast: geoGSP.properties.forecast,
-      alert: wxaURL,
-      polyMapURL: "",
-    }
-
-    return {isValid: true, newGeoID: retGeoData}
-  },
-
-  getWXF: async (PwxfURL, PforceRefresh, PkeepTrying) => {
-    let wxfURL = ""
-    if (!PwxfURL || typeof PwxfURL !== 'string' || !PwxfURL.startsWith('https://api.weather.gov/')) {
-      return {isValid: false, errMsg: "Invalid or missing forecast URL. Must be a valid weather.gov API URL", wxfData: undefined}
-    }
-    else {
-      wxfURL = PwxfURL
-    }
-    
-    let forceRefresh = typeof PforceRefresh !== "undefined" ? PforceRefresh : false
-    let keepTrying = typeof PkeepTrying !== "undefined" ? PkeepTrying : false
-
-    let resultMsg = "ok"
-    let ErrorMsg = "Weather.gov can be flaky, please try again in a few seconds or minutes but it should clear up"
-    let freshWeatherResults = undefined //used for wxfURL results pre parsing
-    let response = ""
-    let useCache = false
-    let geoBlock = undefined
-    const nowDate = new Date()
-    const nowMidnight = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate()).getTime()
-    //check cache first and return if recent
-    geoBlock = provWeatherGov.provCacheData.find((gArr) => gArr.wxfURL == wxfURL)
-
-    if (
-      (geoBlock == undefined ? 0 : geoBlock.length) == 0 ||
-      forceRefresh ||
-      Date.now() - geoBlock.refDateTimeInt > provWeatherGov.timeLimit ||
-      Date.now() - nowMidnight <= provWeatherGov.timeLimit  // startdate driven logic...Force refresh if cache is prior to midnight
-    ) {
-      debugLog("geoID not found or past cacheLimit or forcing refresh requested")
-      geoBlock = []
-      useCache = false
-    } else {
-      useCache = true
-    }
-
-    if (geoBlock.wxfURL !== undefined) {
-      debugLog("cache calc info...timeLimit..." + provWeatherGov.timeLimit + "....geoBlock...." + geoBlock.refDateTimeInt)
-      debugLog("cache calc info...minus calc " + (Date.now() - parseInt(geoBlock.refDateTimeInt)))
-      debugLog("cache calc info ..new calc... " + (Date.now() - parseInt(geoBlock.refDateTimeInt) > provWeatherGov.timeLimit))
-      debugLog("cache calc info...orig calc... " + (Date.now() - parseInt(geoBlock.refDateTimeInt) > provWeatherGov.timeLimit))
-    }
-
-    debugLog("checked use cache and result is......useCache= " + useCache)
-    if (useCache) {
-      debugLog("using Cache for rate limiting")
-      return {isValid: true, wxfData: geoBlock}
-    }
-
-    debugLog("Not using Cache, now going to reach out to Weather.gov...")
-    //no cache or out of date, flush it before adding current get
-    let gotResponse = false
-    for (var i = 0; i < 10; i++) {
-      try {
-        response = await axios.get(wxfURL, {
-          responseType: "json",
-          transformResponse: [(v) => v],
-        })
-
-        if (response.status == 500) {
-          gotResponse = false
-        } else {
-          gotResponse = true
-        }
-      } catch (err) {
-        debugLog(err)
-        gotResponse = false
-        //return {result: wxErrorMsg, wxfData: undefined}
-      }
-      if (gotResponse || !keepTrying) {
-        break
-      }
-      debugLog("Trying Weather.gov again loop..." + i)
-      if (i == 9) {
-        ErrorMsg = "final Weather.gov fail...looping out of max retries"
-      }
-      if (keepTrying && i < 5) {
-        await provWeatherGov.sleep(1.1)
-      } else if (keepTrying) {
-        await provWeatherGov.sleep(5)
-      }
-    } //end loop
-    if (!gotResponse) {
-      return {isValid: false, errMsg: ErrorMsg, wxfData: undefined}
-    }
-
-    freshWeatherResults = JSON.parse(response.data)
-
-    if ((freshWeatherResults.properties.periods == undefined ? 0 : freshWeatherResults.properties.periods.length) == 0)
-      return {isValid: false, errMsg: "no periods returned from weather.gov", wxfData: undefined}
-
-    let cacheTime = Date.now()
-
-    const normalizedDays = provWeatherGov.normalizeData(freshWeatherResults)
-
-    geoBlock = {
-      wxfURL: wxfURL,
-      refDateTimeInt: cacheTime,
-      providerType: provWeatherGov.providerType,
-      periodResolution: provWeatherGov.periodResolution,
-      wxfData: normalizedDays
-    }
-
-    if (!useCache) {
-      debugLog("pushing to cache..." + JSON.stringify(geoBlock, null, 3))
-      provWeatherGov.provCacheData.push(geoBlock)
-    }
-
-    return {isValid: true, wxfData: geoBlock}
-  }, //end of function
-
-  getWXA: async (PwxaURL, PkeepTrying) => {
-    let wxfURL = ""
-    if (!PwxaURL || typeof PwxaURL !== 'string' || !PwxaURL.startsWith('https://api.weather.gov/alerts?')) {
-      return {isValid: false, errMsg: "Invalid or missing alerts URL. Must be a valid weather.gov API URL", wxfData: undefined}
-    }
-    else {
-      wxfURL = PwxaURL
-    }
-
-
-    let keepTrying = typeof PkeepTrying !== "undefined" ? PkeepTrying : false
-
-    let resultMsg = "ok"
-    let ErrorMsg = "Weather.gov can be flaky, please try again in a few seconds or minutes but it should clear up"
-    let freshWeatherResults = undefined //used for wxfURL results pre parsing
-    let response = ""
-
-    let wxaFlat = []
-
-    debugLog("Never hold Alert Cache, now going to reach out to Weather.gov for..." + wxfURL)
-    //no cache or out of date, flush it before adding current get
-    let gotResponse = false
-    for (var i = 0; i < 10; i++) {
-      try {
-        response = await axios.get(wxfURL, {
-          responseType: "json",
-          transformResponse: [(v) => v],
-        })
-        gotResponse = true
-      } catch (err) {
-        debugLog("in catch..." + i)
-        debugLog(err.response.data.error)
-        gotResponse = false
-      }
-      if (gotResponse || !keepTrying) {
-        break
-      }
-      debugLog("Trying Weather.gov again loop..." + i)
-      if (i == 9) {
-        ErrorMsg = "final Weather.gov fail...looping out of max retries"
-      }
-      if (keepTrying && i < 5) {
-        await provWeatherGov.sleep(1.1)
-      } else if (keepTrying) {
-        await provWeatherGov.sleep(5)
-      }
-    } //end loop
-    if (!gotResponse) {
-      return {isValid: false, errMsg: ErrorMsg, wxaData: []}
-    }
-
-    freshWeatherResults = JSON.parse(response.data)
-
-    if ((freshWeatherResults.features == undefined ? 0 : freshWeatherResults.features.length) == 0) {
-      return {isValid: true, Msg: "no alerts returned from weather.gov", wxaData: []}
-    }
-
-    let cacheTime = Date.now()
-    debugLog("cacheTime...." + cacheTime)
-    let validWeather = []
-    freshWeatherResults.features.forEach(function (pedValue, pedKey) {
-      const wxaFlat = {
-        wxfPeriod: pedKey,
-        wxfDayName: pedValue.properties.expires,
-        wxfDescr: pedValue.properties.description,
-        refDayName: "expires: " + pedValue.properties.expires,
-        doReport: provWeatherGov.alertIsCurrent[">="](pedValue.properties.expires),
-        formatted:
-          "expires: " +
-          provWeatherGov.formatDateTime(pedValue.properties.expires) +
-          " - " +
-          pedValue.properties.headline +
-          " \n" +
-          pedValue.properties.description,
-      }
-      if (wxaFlat.doReport) {
-        validWeather.push(wxaFlat)
-      }
-    }) // end of forEach loop
-
-    return {isValid: true, wxaData: validWeather}
-  }, //end of function
-
-  getPolyMapURL: async (PwxfURL, PkeepTrying) => {
+  getPolyMapURL: async (PwxfURL, keepTrying = true) => {
     debugLog("getPolyMapURL function called...")
     // get the polygon coordinates from the provGeoData
     let wxfURL = ""
@@ -474,59 +359,24 @@ const provWeatherGov = {
       wxfURL = PwxfURL
     }
 
-    let keepTrying = typeof PkeepTrying !== "undefined" ? PkeepTrying : false
-
-    let ErrorMsg = "Weather.gov can be flaky, please try again in a few seconds or minutes but it should clear up"
     let freshWeatherResults = undefined //used for wxfURL results pre parsing
-    let response = ""
 
-    let gotResponse = false
-    for (var i = 0; i < 10; i++) {
-      try {
-        response = await axios.get(wxfURL, {
-          responseType: "json",
-          transformResponse: [(v) => v],
-        })
+    freshWeatherResults = await axiosLoop("weather.gov", wxfURL, keepTrying)
 
-        if (response.status == 500) {
-          gotResponse = false
-        } else {
-          gotResponse = true
-        }
-      } catch (err) {
-        debugLog(err)
-        gotResponse = false
-        //return {result: wxErrorMsg, wxfData: undefined}
-      }
-      if (gotResponse || !keepTrying) {
-        break
-      }
-      debugLog("Trying Weather.gov again loop..." + i)
-      if (i == 9) {
-        ErrorMsg = "final Weather.gov fail...looping out of max retries"
-      }
-      if (keepTrying && i < 5) {
-        await provWeatherGov.sleep(1.1)
-      } else if (keepTrying) {
-        await provWeatherGov.sleep(5)
-      }
-    } //end loop
-    if (!gotResponse) {
-      return {isValid: false, errMsg: ErrorMsg, wxfData: undefined}
+    if (!freshWeatherResults.isValid) {
+      return {isValid: false, errMsg: freshWeatherResults.errMsg, wxfData: undefined}
     }
 
-    freshWeatherResults = JSON.parse(response.data)
-
-    if ((freshWeatherResults.geometry == undefined ? 0 : freshWeatherResults.geometry.coordinates.length) == 0)
+    if ((freshWeatherResults.jsonData.geometry == undefined ? 0 : freshWeatherResults.jsonData.geometry.coordinates.length) == 0)
       return {isValid: false, errMsg: "no coordinates returned from weather.gov", wxfData: undefined}
 
     let cacheTime = Date.now()
     let polyURL = "https://www.keene.edu/campus/maps/tool/?coordinates="
 
     // Check if geometry and coordinates exist
-    if (freshWeatherResults.geometry && freshWeatherResults.geometry.coordinates) {
+    if (freshWeatherResults.jsonData.geometry && freshWeatherResults.jsonData.geometry.coordinates) {
       // Loop through each polygon (usually just one)
-      freshWeatherResults.geometry.coordinates.forEach((polygon, polyIndex) => {
+      freshWeatherResults.jsonData.geometry.coordinates.forEach((polygon, polyIndex) => {
         // Loop through each point in the polygon
         polygon.forEach((point, index) => {
           // Add the point to the URL
@@ -544,7 +394,7 @@ const provWeatherGov = {
         }
 
         // Add %0A between polygons if there are multiple
-        if (polyIndex < freshWeatherResults.geometry.coordinates.length - 1) {
+        if (polyIndex < freshWeatherResults.jsonData.geometry.coordinates.length - 1) {
           polyURL += "%0A"
         }
       })
@@ -555,105 +405,7 @@ const provWeatherGov = {
     return {isValid: true, polyURL: polyURL}
   }, // end of function
 
-  normalizeData: (rawData) => {
-    const currentDate = new Date()
-    let firstPeriodIsNight = false; // Temporary variable for normalization logic
-    
-    // Group periods by day first
-    const dayPeriods = rawData.properties.periods.reduce((days, period, index) => {
-      let periodStart = new Date(period.startTime);
-      let dayKey = periodStart.toISOString().split('T')[0];
 
-      // Check for prior night condition on first period only
-      if (index === 0) {
-        firstPeriodIsNight = currentDate.getHours() < 6 && 
-                            !period.isDaytime && 
-                            periodStart.toISOString().split('T')[0] === currentDate.toISOString().split('T')[0];
-        
-        if (firstPeriodIsNight) {
-          periodStart.setDate(periodStart.getDate() - 1);
-          periodStart.setHours(18, 0, 0, 0);
-          dayKey = periodStart.toISOString().split('T')[0];
-        }
-      }
-      
-      if (!days[dayKey]) {
-        days[dayKey] = {
-          periods: [],
-          high: -Infinity,
-          low: Infinity,
-          date: periodStart
-        };
-      }
+};
 
-      days[dayKey].periods.push(new WxPeriod({
-        timeOfDay: period.isDaytime ? 'day' : 'night',
-        startTime: periodStart, // Use updated periodStart
-        endTime: period.endTime,
-        temp: period.temperature,
-        description: period.detailedForecast,
-        precip: period.probabilityOfPrecipitation?.value || 0,
-        precipAmount: 0,
-        wind: {
-          speed: WxDataNormalizer.extractWindSpeed(period.windSpeed),
-          gust: WxDataNormalizer.extractGustSpeed(period.detailedForecast),
-          direction: period.windDirection
-        }
-      }));
-
-      // Update high/low temps
-      if (period.isDaytime) {
-        days[dayKey].high = Math.max(days[dayKey].high, period.temperature || 0);
-      } else {
-        days[dayKey].low = Math.min(days[dayKey].low, period.temperature || 0);
-      }
-
-      return days;
-    }, {});
-
-    // Convert each day's data into WxDay objects
-    return Object.entries(dayPeriods).map(([dateKey, data]) => {
-      const adjustedDate = firstPeriodIsNight ? 
-        new Date(data.date.getTime()) : 
-        currentDate;
-      
-      let adjustedDayName = data.date;
-      // Sort periods to ensure day comes before night
-      const sortedPeriods = [...data.periods].map(period => {
-
-        adjustedDayName = WxDataNormalizer.getAdjustedDayName(period.startTime, adjustedDate);
-
-        return {timeOfDay: period.timeOfDay,
-        startTime: period.startTime,
-        endTime: period.endTime,
-        temperature: period.temperature,
-        conditions: {
-          description: period.conditions.description,
-          precipitation: period.conditions.precipitation,
-          wind: period.conditions.wind,
-          clouds: period.conditions.clouds,
-          visibility: period.conditions.visibility
-        },
-        isBadWeather: WxDataNormalizer.checkForBadWeather(period.conditions.description)  // Add flag at period level
-        }
-      }).sort((a, b) => a.timeOfDay === 'night' ? 1 : -1);
-
-      return new WxDay({
-        date: data.date,
-        dayOfWeek: adjustedDayName,
-        highTemp: data.high === -Infinity ? 0 : data.high,
-        lowTemp: data.low === Infinity ? 0 : data.low,
-        description: sortedPeriods[0]?.conditions?.description || "No description available",
-        precipProb: Math.max(...sortedPeriods.map(p => p.conditions.precipitation.probability)),
-        precipAmount: 0, // weather.gov doesn't provide amount
-        windSpeed: Math.max(...sortedPeriods.map(p => p.conditions.wind.speed)),
-        windGust: Math.max(...sortedPeriods.map(p => p.conditions.wind.gust)),
-        windDir: sortedPeriods[0]?.conditions?.wind?.direction || "",
-        periods: sortedPeriods,
-        isBadWeather: sortedPeriods.some(p => p.isBadWeather)  // Set day-level flag based on periods
-      });
-    });
-  },
-} //end of provWeatherGov export
-
-module.exports = {provWeatherGov}
+module.exports = { provWeatherGov };

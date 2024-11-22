@@ -1,8 +1,20 @@
-const axios = require("axios").default;
+/* PROVIDER: weatherbit.io
+   API: Weatherbit.io API
+   URL: https://api.weatherbit.io/v2.0/forecast/daily?
+   DOCUMENTATION: https://www.weatherbit.io/api
+   OPEN SOURCE CODE: n/a
+   
+   WEATHER DATA:
+   SAMPLE RAW DATA: https://api.weatherbit.io/v2.0/forecast/daily?city=Raleigh,NC&key=API_KEY
+   
+   REQUIREMENTS:
+   1. BUILD THE WEATHERBIT API URL FROM THE CITY/STATE, or ZIP CODE, or LAT/LON
+   2. CONVERT THE RAW WEATHER DATA TO THE STANDARD WEATHER SOURCE FORMAT FOR THE BOT FRAMEWORK
+*/
+
+
 const cfg = require("../wx-bot-config");
-//const { WX_DATA_TYPES, WX_CAPABILITIES, WX_PERIOD_RESOLUTION } = require('./wx-provider-types');
-//const { WX_DATA_TYPES, WX_CAPABILITIES, WX_PERIOD_RESOLUTION, findMaxNumInStr, axiosLoop_geoCode, axiosLoop } = require('./wx-provider-utils');
-const { WX_DATA_TYPES, WX_CAPABILITIES, WX_PERIOD_RESOLUTION  } = require('./wx-provider-utils');
+const { WX_DATA_TYPES, WX_CAPABILITIES, WX_PERIOD_RESOLUTION, findMaxNumInStr, axiosLoop } = require('./wx-provider-utils');
 
 // Debug logging helper
 const debugLog = (msg) => {
@@ -161,7 +173,13 @@ const provWeatherBit = {
 
 
     // Sun/Moon narrative
-    /*const sunrise = new Date(dayData.sunrise_ts * 1000)
+    /* using sunset/sunrise times requires more thought and testing of timezone implications 
+          from provider, 
+          timezone setting where weatherBot is running when calling API,
+          and that the Simplex client timezone is not available to weatherBot 
+          NOTE: developers can use the commented code below to add at their discretion and testing.
+    
+    const sunrise = new Date(dayData.sunrise_ts * 1000)
     const sunset = new Date(dayData.sunset_ts * 1000)
     
     // Get the local time zone offset in minutes
@@ -225,8 +243,8 @@ const provWeatherBit = {
             type: "rain"
           },
           wind: {
-            speed: dayData.wind_spd || 0,
-            gust: dayData.wind_gust_spd || 0,
+            speed: dayData.wind_spd ? dayData.wind_spd : undefined,  //normalizer will extract from description if not incl from provider
+            gust: dayData.wind_gust_spd ? dayData.wind_gust_spd : undefined,  //normalizer will extract from description if not incl from provider
             direction: dayData.wind_cdir_full || ""
           },
           atmospheric: {
@@ -281,48 +299,6 @@ const provWeatherBit = {
     return new Promise((resolve) => {
       setTimeout(resolve, manySecs * 1000)
     })
-  },
-
-
-  axiosLoop: async (wxfURL, keepTrying) => {
-    let retVal = ""
-    let response = ""
-    let gotResponse = false
-    let ErrorMsg = "Weatherbit.io API error, please try again"
-
-    for (var i = 0; i < 10; i++) {
-      try {
-        response = await axios.get(wxfURL, {
-          responseType: "json",
-          transformResponse: [(v) => v],
-        })
-        gotResponse = true
-      } catch (err) {
-        debugLog("API call error: " + err)
-        gotResponse = false
-      }
-
-      if (gotResponse || !keepTrying) break
-
-      if (i == 9) {
-        ErrorMsg = "Failed after maximum retries"
-      }
-      
-      await provWeatherBit.sleep(keepTrying ? (i < 5 ? 1.1 : 5) : 0)
-    }
-
-    if (!gotResponse) {
-      return {result: ErrorMsg, wxfData: undefined}
-    }
-
-    try {
-      retVal = JSON.parse(response.data)
-    } catch (err) {
-      console.log("Error parsing weatherbit.io json response data: " + err)
-      retVal = {result: "Error parsing weatherbit.io response, it may not like this specific location", wxfData: undefined}
-    }
-
-    return retVal
   },
 
 
@@ -389,38 +365,33 @@ const provWeatherBit = {
 
     debugLog("Not using Cache, now going to reach out to Weatherbit.io...")
     const todaytest = new Date();
-    debugLog("what is new Date() returning:", todaytest);
+    //debugLog("what is new Date() returning:", todaytest);
     // Fetch fresh data
     try {
-        const freshWeatherResults = await provWeatherBit.axiosLoop(wxfURL, keepTrying)
-        /*console.log(`
+        const freshWeatherResults = await axiosLoop("weatherbit.io", wxfURL, keepTrying)
+
+        if (!freshWeatherResults.isValid) {
+          return {isValid: false, errMsg: freshWeatherResults.errMsg, wxfData: undefined}
+        }
+        /*debugLog(`
 
 
             =========== freshWeatherResults.data ==================
             ${JSON.stringify(freshWeatherResults, null, 3)}`);*/
-        if (!freshWeatherResults.data) {
-          return {isValid: false, errMsg: "No forecast data returned", wxfData: undefined}
-        }
-
+            if ((freshWeatherResults.jsonData.data == undefined ? 0 : freshWeatherResults.jsonData.data.length) == 0)
+              return {isValid: false, errMsg: "no periods returned from weatherbit.io", wxfData: undefined}
+    
         //console.log("freshWeatherResults.data:", freshWeatherResults.data);
         
-        const wxfProv = provWeatherBit.normalizeToWxfProv(freshWeatherResults.data, wxfURL);
-        /*const wxfProv = provWeatherBit.normalizeToWxfProv(
-            freshWeatherResults.data.filter(futureDays => {
-                const forecastDate = new Date(futureDays.valid_date);
-                const today = new Date();
-                // Set to midnight for clean date comparison
-                //today.setHours(0, 0, 0, 0);
-                //forecastDate.setHours(0, 0, 0, 0);
-                return forecastDate >= today; //****important to keep this logic to filter out past dates
-            }),wxfURL );*/
+        const wxfProv = provWeatherBit.normalizeToWxfProv(freshWeatherResults.jsonData.data, wxfURL);
+
 
 
       provWeatherBit.provCacheData = provWeatherBit.provCacheData.filter(c => 
         c.metadata.location.wxfURL !== wxfURL
       );
       
-      /*console.log(`
+      /*debugLog(`
 
 
         =========== new wxfProv ==================
@@ -450,12 +421,16 @@ const provWeatherBit = {
 
     let keepTrying = PkeepTrying || false
 
-    const alertResults = await provWeatherBit.axiosLoop(wxfURL, keepTrying)
-    if (!alertResults.alerts) {
-      return {isValid: true, wxaData: []}
+    const alertResults = await axiosLoop("weatherbit.io", wxfURL, keepTrying)
+
+    if (!alertResults.isValid) {
+      return {isValid: false, errMsg: alertResults.errMsg, wxaData: []}
     }
 
-    const validAlerts = alertResults.alerts.map((alert, index) => ({
+
+
+
+    const validAlerts = alertResults.jsonData.alerts.map((alert, index) => ({
       wxfPeriod: index,
       wxfDayName: alert.expires_local,
       wxfDescr: alert.description,
