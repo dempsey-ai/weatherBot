@@ -20,7 +20,7 @@ const natural = require("natural")
 const userManagement = require("./wx-bot-usermgmt")
 const wxBotProviderMap = require("./wxf-providers/wx-bot-provider-map")
 const cfg = require("./wx-bot-config")
-const { WX_DATA_TYPES, WX_PERIOD_RESOLUTION } = require('./wxf-providers/wx-provider-types')
+const { WX_DATA_TYPES, WX_CAPABILITIES, WX_PERIOD_RESOLUTION } = require('./wxf-providers/wx-provider-utils');
 
 const activeProviderName = wxBotProviderMap.activeProvider.providerName
 

@@ -25,6 +25,7 @@ let appConfig = {
   simplexChatPort: 5225,
   shareBotAddress: false,
   initHostUser: "",
+  version: "1.4",
   //wxProviderId: "weather.gov",
   paths: {
     userHome: "",

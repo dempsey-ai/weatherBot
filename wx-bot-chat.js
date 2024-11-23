@@ -1,5 +1,5 @@
 /*
-weatherBot chat client - version 1.0 - Uses SimpleX Chat frameworkto provide weather forecast reports to user messages
+weatherBot chat client - version 1.4 - Uses SimpleX Chat frameworkto provide weather forecast reports to user messages
     Copyright (C) 2024  Scott Dempsey
 
     This program is free software: you can redistribute it and/or modify
@@ -134,7 +134,7 @@ async function run() {
       console.log("Host User already connected as :", existingUserId)
     }
   }
-
+  console.log("weatherBot version:", cfg.appConfig.version)
   await processMessages(chat)
 }
 
