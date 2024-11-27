@@ -170,8 +170,8 @@ const provWeatherGov = {
     if (geoType == "loc-gps") {
       //split into lat and long
       const geoSplit = geoData.toLowerCase().split(",")
-      geoLatLon.latt = geoSplit[0]
-      geoLatLon.longt = geoSplit[1]
+      geoLatLon.jsonData = {latt: geoSplit[0], longt: geoSplit[1]}
+      geoLatLon.isValid = true
     } else if (geoType == "loc-city") {
       debugLog("https://geocode.xyz/" + geoData + "?region=us&json=1")
 

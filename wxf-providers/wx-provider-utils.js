@@ -27,7 +27,7 @@ weatherBot chat client - version 1.0 - Uses SimpleX Chat frameworkto provide wea
 const axios = require("axios").default;
 const cfg = require("../wx-bot-config");
 
-const debugLog = (msg) => {
+const debugLog = async (msg) => {
   if (cfg.appConfig.isDebug) {
     console.log(msg);
   }
@@ -99,49 +99,63 @@ const sleep = async (manySecs) => {
           responseType: "json",
           transformResponse: [(v) => v],
         })
-
+        await debugLog("axiosLoop response status: " + response.status)
+        
         if (response.status >= 500 && response.status < 600) {
-            gotResponse = false
-          } else if (checkThrottled){
-            let isThrottled = JSON.parse(response.data)
-              if ( /(throttled)/.test(isThrottled.latt.toLowerCase())) {
-              debugLog("isThrottled geoCode issue...." + JSON.stringify(isThrottled, null, 3))
-              throw "axios geoCode throttle issue happened"
-              }} // generates an exception
-            else {
-              gotResponse = true}  //no throttle issue and we have a response
-      } catch (err) {
-        debugLog("in axiosLoop catch..." + i)
-        if (err.response !== undefined) {
-          debugLog(err.response.data.error)
-        } else {
-          debugLog("in axiosLoop catch err..." + err)
+          gotResponse = false
+          continue
         }
+
+        // Then check for throttling if needed
+        if (checkThrottled) {
+          let responseData = JSON.parse(response.data)
+          if (/(throttled)/i.test(responseData.latt)) {
+            await debugLog("isThrottled geoCode issue...." + JSON.stringify(responseData, null, 3))
+            gotResponse = false
+            continue
+          }
+        }
+
+        // If we get here, we have a good response
+        gotResponse = true
+        retVal = response.data
+        break
+
+      } catch (err) {
+        await debugLog("in axiosLoop catch..." + i)
+        if (err.response !== undefined) {
+          await debugLog(err.response.data.error)
+        } else {
+          await debugLog("in axiosLoop catch err..." + err)
+        }
+        gotResponse = false
       }
 
-      if (gotResponse || !keepTrying) break
+      // Only continue if we want to keep trying and haven't got a response
+      if (!keepTrying || gotResponse) {
+        break
+      }
 
       if (i == 9) {
         ErrorMsg = "Failed after maximum axios loop retries"
       }
       
-      await sleep(keepTrying ? (i < 5 ? 1.1 : 5) : 0)   //progressively longer sleep times to help with throttling timers
+      await sleep(keepTrying ? (i < 5 ? 1.1 : 5) : 0)
     }
 
     if (!gotResponse) {
-        return {isValid: false, errMsg: ErrorMsg, jsonData: undefined}
-      }
-  
-  
-      try {
-        retVal = JSON.parse(response.data)
-      } catch (err) {
+      return {isValid: false, errMsg: ErrorMsg, jsonData: undefined}
+    }
+
+    try {
+      retVal = typeof retVal === 'string' ? JSON.parse(retVal) : retVal
+    } catch (err) {
       console.log("Error parsing "+infoText+" json response: " + err)
-        return {isValid: false, errMsg: "Error parsing "+infoText+" response", jsonData: undefined}
-      }
-  
-      return {isValid: true, jsonData: retVal}
-  }
+      return {isValid: false, errMsg: "Error parsing "+infoText+" response", jsonData: undefined}
+    }
+
+    return {isValid: true, jsonData: retVal}
+}
 
 
 
