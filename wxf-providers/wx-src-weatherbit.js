@@ -143,10 +143,10 @@ const provWeatherBit = {
     // Snow narrative (if applicable)
     if (dayData.snow > 0) {
       let snowIntensity = ""
-      if (dayData.snow < 2) snowIntensity = dayData.snow + "% chance, light snow"
-      else if (dayData.snow < 4) snowIntensity = dayData.snow + "% chance, moderate snow"
-      else if (dayData.snow < 6) snowIntensity = dayData.snow + "% chance, heavy snow"
-      else snowIntensity = dayData.snow + "% chance, blizzard conditions"
+      if (dayData.snow < 2) snowIntensity = dayData.snow + " of accumulation, light snow"
+      else if (dayData.snow < 4) snowIntensity = dayData.snow + " inches of accumulation, moderate snow"
+      else if (dayData.snow < 6) snowIntensity = dayData.snow + " inches of accumulation, heavy snow"
+      else snowIntensity = dayData.snow + " inches of accumulation, blizzard conditions"
       
       description.push(snowIntensity)
     }

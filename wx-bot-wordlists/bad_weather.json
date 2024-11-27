@@ -1,5 +1,6 @@
 {
-  "generalWords": ["bad weather", "bad", "terrible", "horrible", "awful", "miserable", "sleet", "hail", "snow"],
+  "generalWords": ["bad weather", "bad", "terrible", "horrible", "awful", "miserable", "sleet", "hail",
+  "thunderstorm", "thunder", "lightning", "dangerous", "tornado", "hurricane", "severe", "flood", "fog", "extreme"],
   "specificCriteria": [
     {
       "label": "Bad Weather Words",
